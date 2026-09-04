@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-2022
     env:
       MICROSIP_SOURCE_DIR: extracted\MicroSIP-3.22.3-src
-      PJPROJECT_REF: 6cab30cec44af36ba7c8a45ff7af2f74a8ed288c
+      PJPROJECT_REF: 7de6e686fee1642f5443a3f39f0e5ad5e478a117
       OPUS_REF: ddbe48383984d56acd9e1ab6a090c54ca6b735a6
 
     steps:
