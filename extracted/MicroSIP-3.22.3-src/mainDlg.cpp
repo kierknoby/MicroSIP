@@ -2537,7 +2537,6 @@ void CmainDlg::ApplyDarkMode()
 	SetWindowTheme(m_ButtonMenu.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
 	CStatusBarCtrl& statusctrl = m_bar.GetStatusBarCtrl();
 	statusctrl.SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
-	statusctrl.SetTextColor(accountSettings.darkMode ? RGB(235, 238, 241) : GetSysColor(COLOR_WINDOWTEXT));
 	if (pageDialer) {
 		pageDialer->SetDarkMode(accountSettings.darkMode);
 	}

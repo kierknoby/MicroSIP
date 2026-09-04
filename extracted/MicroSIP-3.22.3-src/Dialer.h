@@ -40,7 +40,6 @@ class Dialer :
 	CFont m_font_number;
 	CFont m_font_balance;
 	CFont m_font_call;
-	CFont m_font_accountIdentity;
 	CFont m_font_shortcuts;
 
 	CButtonDialer m_ButtonDialer1;
@@ -126,6 +125,7 @@ public:
 	void SetNumber(CString  number, int callsCount = -1);
 	void UpdateCallButton(BOOL forse = FALSE, int callsCount = -1);
 	void UpdateAccountIdentity();
+	void SetDarkMode(bool enabled);
 	void OpenAccountSidecar();
 	void CloseAccountSidecar();
 	void RepositionAccountSidecar();

@@ -160,6 +160,7 @@ public:
 	void SetPaneText2(CString str = _T(""));
 	void AccountSettingsPendingSave();
 	void SnapMainWindowToWorkArea();
+	void ApplyDarkMode();
 	void OnAccountChanged(bool init = false);
 	void OpenTransferDlg(CWnd *pParent, msip_action action, pjsua_call_id call_id = PJSUA_INVALID_ID, Contact *selectedContact = NULL);
 	void UpdateSoundDevicesIds();
@@ -238,6 +239,7 @@ public:
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnSize(UINT type, int w, int h);
 	afx_msg void OnExitSizeMove();
+	afx_msg void OnMenuDarkMode();
 	afx_msg LRESULT onShellHookMessage(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallAnswer(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallHangup(WPARAM wParam,LPARAM lParam);

@@ -21,6 +21,7 @@
 #include "Strsafe.h"
 #include "const.h"
 #include "global.h"
+#include "settings.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // CButtonDialer
