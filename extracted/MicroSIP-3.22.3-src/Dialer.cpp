@@ -930,9 +930,7 @@ void Dialer::RebuildButtons(bool init)
 		utilityRect.right = clientRect.right - MulDiv(4, dpiY, 96);
 		utilityRect.top = lowerControlsRect.bottom + rowGap;
 		utilityRect.bottom = utilityRect.top + lowerControlsRect.Height();
-		CRect identityRect = utilityRect;
-		identityRect.top = utilityRect.bottom + rowGap;
-		identityRect.bottom = identityRect.top + lowerControlsRect.Height();
+		CRect identityRect = rect;
 		identityRect.left = MulDiv(4, dpiY, 96);
 		int switchWidth = MulDiv(24, dpiY, 96);
 		CRect switchRect = identityRect;
