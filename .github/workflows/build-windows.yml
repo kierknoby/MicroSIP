@@ -98,7 +98,7 @@ jobs:
           '@ | Set-Content "$buildRoot\pjlib\include\pj\config_site.h"
           $env:CL = "/I`"$opusIncludeDir`" $env:CL"
           $env:LIB = "$opusLibraryDir;$env:LIB"
-          msbuild "$buildRoot\pjproject-vs14.sln" /m /t:Build `
+          msbuild "$buildRoot\pjproject-vs14.sln" /m /t:libpjproject `
             /p:Configuration=Release-Static /p:Platform=Win32 `
             /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
           if ($LASTEXITCODE -ne 0) { throw "PJProject build failed with exit code $LASTEXITCODE" }
