@@ -29,12 +29,130 @@
 
 static CString digitsDTMFDelayed;
 
+class Dialer::CAccountSidecar : public CWnd
+{
+public:
+	CAccountSidecar(Dialer* owner) : owner(owner) {}
+	~CAccountSidecar()
+	{
+		for (int i = 0; i < buttons.GetCount(); i++) {
+			delete buttons[i];
+		}
+	}
+
+	void ShowAccounts()
+	{
+		for (int i = 0; i < buttons.GetCount(); i++) {
+			delete buttons[i];
+		}
+		buttons.RemoveAll();
+		accountIds.RemoveAll();
+
+		int width = MulDiv(190, dpiY, 96);
+		int buttonHeight = MulDiv(34, dpiY, 96);
+		int accountId = 1;
+		Account account;
+		while (accountSettings.AccountLoad(accountId, &account)) {
+			CString label = account.username;
+			if (!account.displayName.IsEmpty()) {
+				label.Append(_T(" \x00b7 ") + account.displayName);
+			}
+			if (accountSettings.accountId == accountId) {
+				label = _T("\x2022 ") + label;
+			}
+			CButton* button = new CButton();
+			button->Create(label, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+				CRect(0, (accountId - 1) * buttonHeight, width, accountId * buttonHeight), this, 5000 + accountId);
+			button->SetFont(owner->GetFont());
+			buttons.Add(button);
+			accountIds.Add(accountId);
+			accountId++;
+		}
+
+		if (!buttons.GetCount()) {
+			return;
+		}
+		CRect identityRect;
+		CWnd* identity = owner->GetDlgItem(IDC_DIALER_ACCOUNT_IDENTITY);
+		identity->GetWindowRect(&identityRect);
+		CWnd* mainWindow = owner->GetParent();
+		CRect mainRect;
+		mainWindow->GetWindowRect(&mainRect);
+		MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+		GetMonitorInfo(MonitorFromWindow(mainWindow->m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
+		int height = buttons.GetCount() * buttonHeight;
+		int x = mainRect.left - width - MulDiv(4, dpiY, 96);
+		int y = identityRect.top;
+		if (x < monitorInfo.rcWork.left) {
+			x = mainRect.right + MulDiv(4, dpiY, 96);
+		}
+		x = max(monitorInfo.rcWork.left, min(x, monitorInfo.rcWork.right - width));
+		y = max(monitorInfo.rcWork.top, min(y, monitorInfo.rcWork.bottom - height));
+		SetWindowPos(&CWnd::wndTop, x, y, width, height, SWP_SHOWWINDOW);
+		buttons[0]->SetFocus();
+	}
+
+protected:
+	afx_msg void OnKillFocus(CWnd* newWindow)
+	{
+		if (newWindow && (newWindow == owner || owner->IsChild(newWindow) || IsChild(newWindow))) {
+			return;
+		}
+		owner->CloseAccountSidecar();
+	}
+	afx_msg void OnActivate(UINT state, CWnd*, BOOL)
+	{
+		if (state == WA_INACTIVE) {
+			owner->CloseAccountSidecar();
+		}
+	}
+	afx_msg void OnKeyDown(UINT key, UINT repeat, UINT flags)
+	{
+		if (key == VK_ESCAPE) {
+			owner->CloseAccountSidecar();
+			return;
+		}
+		CWnd::OnKeyDown(key, repeat, flags);
+	}
+	BOOL PreTranslateMessage(MSG* message) override
+	{
+		if (message->message == WM_KEYDOWN && message->wParam == VK_ESCAPE) {
+			owner->CloseAccountSidecar();
+			return TRUE;
+		}
+		return CWnd::PreTranslateMessage(message);
+	}
+	afx_msg void OnAccount(UINT commandId)
+	{
+		int index = commandId - 5000 - 1;
+		if (index >= 0 && index < accountIds.GetCount()) {
+			int accountId = accountIds[index];
+			owner->CloseAccountSidecar();
+			mainDlg->OnMenuAccountChange(ID_ACCOUNT_CHANGE_RANGE + accountId - 1);
+		}
+	}
+	DECLARE_MESSAGE_MAP()
+
+private:
+	Dialer* owner;
+	CArray<CButton*, CButton*> buttons;
+	CArray<int, int> accountIds;
+};
+
+BEGIN_MESSAGE_MAP(Dialer::CAccountSidecar, CWnd)
+	ON_WM_KILLFOCUS()
+	ON_WM_ACTIVATE()
+	ON_WM_KEYDOWN()
+	ON_COMMAND_RANGE(5001, 5099, OnAccount)
+END_MESSAGE_MAP()
+
 static UINT_PTR blinkTimer = NULL;
 static bool blinkState = false;
 
 Dialer::Dialer(CWnd* pParent /*=NULL*/)
 	: CBaseDialog(Dialer::IDD, pParent)
 {
+	m_accountSidecar = NULL;
 	delayedDTMF = false;
 	m_hasVoicemail = false;
 	m_isButtonVoicemailVisible = false;
@@ -43,6 +161,7 @@ Dialer::Dialer(CWnd* pParent /*=NULL*/)
 
 Dialer::~Dialer(void)
 {
+	CloseAccountSidecar();
 }
 
 void Dialer::DoDataExchange(CDataExchange* pDX)
@@ -453,6 +572,8 @@ BOOL Dialer::OnInitDialog()
 	//--
 	lf.lfHeight = -MulDiv(13, dpiY, 96);
 	m_font_call.CreateFontIndirect(&lf);
+	lf.lfHeight = -MulDiv(15, dpiY, 96);
+	m_font_accountIdentity.CreateFontIndirect(&lf);
 	//--
 	lf.lfHeight = -MulDiv(19, dpiY, 96);
 	m_font.CreateFontIndirect(&lf);
@@ -601,6 +722,7 @@ BEGIN_MESSAGE_MAP(Dialer, CBaseDialog)
 	ON_BN_CLICKED(IDC_DIALER_SPK_CLOCK, &Dialer::OnBnClickedSpkClock)
 	ON_BN_CLICKED(IDC_DIALER_ECHO_TEST, &Dialer::OnBnClickedEchoTest)
 	ON_BN_CLICKED(IDC_DIALER_CALL_TRACE, &Dialer::OnBnClickedCallTrace)
+	ON_BN_CLICKED(IDC_DIALER_ACCOUNT_SWITCH, &Dialer::OnBnClickedAccountSwitch)
 	ON_WM_HSCROLL()
 	ON_WM_CREATE()
 	ON_WM_DESTROY()
@@ -634,6 +756,7 @@ void Dialer::UpdateVoicemailButton(bool hasMail)
 
 void Dialer::RebuildButtons(bool init)
 {
+	CloseAccountSidecar();
 	if (IsChild(&m_ButtonSpkClock)) {
 		m_ButtonSpkClock.DestroyWindow();
 		m_ButtonEchoTest.DestroyWindow();
@@ -641,6 +764,9 @@ void Dialer::RebuildButtons(bool init)
 	}
 	if (IsChild(&m_AccountIdentity)) {
 		m_AccountIdentity.DestroyWindow();
+	}
+	if (IsChild(&m_AccountSwitch)) {
+		m_AccountSwitch.DestroyWindow();
 	}
 
 	if (accountSettings.accountId && !accountSettings.account.voicemailNumber.IsEmpty()) {
@@ -694,7 +820,8 @@ void Dialer::RebuildButtons(bool init)
 	bool addConf = accountSettings.buttonCONF;
 	
 	bool addRec = accountSettings.recordingButton;
-	if (addDND || addFWD || addAA || addAC || addConf || addRec) {
+	bool addAccountControls = true;
+	if (addDND || addFWD || addAA || addAC || addConf || addRec || addAccountControls) {
 		CRect windowRect;
 		if (!init) {
 			GetWindowRect(windowRect);
@@ -787,8 +914,18 @@ void Dialer::RebuildButtons(bool init)
 		}
 		CRect identityRect = rect;
 		identityRect.left = MulDiv(4, dpiY, 96);
+		int switchWidth = MulDiv(24, dpiY, 96);
+		CRect switchRect = identityRect;
+		switchRect.right = switchRect.left + switchWidth;
+		m_AccountSwitch.Create(_T(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON | BS_ICON, switchRect, this, IDC_DIALER_ACCOUNT_SWITCH);
+		m_AccountSwitch.SetFont(GetFont());
+		m_AccountSwitch.SetIcon(LoadImageIcon(IDI_CONTACT, 16, 16));
+		if (m_ToolTip) {
+			m_ToolTip.AddTool(&m_AccountSwitch, Translate(_T("Switch account")));
+		}
+		identityRect.left = switchRect.right + MulDiv(4, dpiY, 96);
 		m_AccountIdentity.Create(_T(""), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS, identityRect, this, IDC_DIALER_ACCOUNT_IDENTITY);
-		m_AccountIdentity.SetFont(GetFont());
+		m_AccountIdentity.SetFont(&m_font_accountIdentity);
 		AutoMove(m_AccountIdentity.m_hWnd, 100, 100, 0, 0);
 		UpdateAccountIdentity();
 
@@ -831,6 +968,34 @@ void Dialer::UpdateAccountIdentity()
 		identity.Append(_T(" \x00b7 ") + accountSettings.account.displayName);
 	}
 	m_AccountIdentity.SetWindowText(identity);
+}
+
+void Dialer::OpenAccountSidecar()
+{
+	if (!m_accountSidecar) {
+		m_accountSidecar = new CAccountSidecar(this);
+		m_accountSidecar->CreateEx(WS_EX_TOOLWINDOW, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL, WS_POPUP | WS_BORDER, CRect(0, 0, 0, 0), GetParent(), 0);
+	}
+	m_accountSidecar->ShowAccounts();
+}
+
+void Dialer::CloseAccountSidecar()
+{
+	if (m_accountSidecar) {
+		CAccountSidecar* sidecar = m_accountSidecar;
+		m_accountSidecar = NULL;
+		if (::IsWindow(sidecar->m_hWnd)) {
+			sidecar->DestroyWindow();
+		}
+		delete sidecar;
+	}
+}
+
+void Dialer::RepositionAccountSidecar()
+{
+	if (m_accountSidecar && ::IsWindow(m_accountSidecar->m_hWnd)) {
+		m_accountSidecar->ShowAccounts();
+	}
 }
 
 void Dialer::OnTimer(UINT_PTR TimerVal)
@@ -1495,6 +1660,11 @@ void Dialer::OnBnClickedEchoTest()
 void Dialer::OnBnClickedCallTrace()
 {
 	mainDlg->MakeCall(_T("*69"));
+}
+
+void Dialer::OnBnClickedAccountSwitch()
+{
+	OpenAccountSidecar();
 }
 
 void Dialer::OnBnClickedDelete()

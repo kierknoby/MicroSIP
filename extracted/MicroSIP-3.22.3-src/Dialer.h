@@ -35,10 +35,12 @@ enum DialerActions {
 class Dialer :
 	public CBaseDialog
 {
+	class CAccountSidecar;
 	CFont m_font;
 	CFont m_font_number;
 	CFont m_font_balance;
 	CFont m_font_call;
+	CFont m_font_accountIdentity;
 	CFont m_font_shortcuts;
 
 	CButtonDialer m_ButtonDialer1;
@@ -62,7 +64,9 @@ class Dialer :
 	CButton m_ButtonSpkClock;
 	CButton m_ButtonEchoTest;
 	CButton m_ButtonCallTrace;
+	CButton m_AccountSwitch;
 	CStatic m_AccountIdentity;
+	CAccountSidecar* m_accountSidecar;
 	HICON m_hIconMuteOutput;
 	HICON m_hIconMutedOutput;
 	HICON m_hIconMuteInput;
@@ -122,6 +126,9 @@ public:
 	void SetNumber(CString  number, int callsCount = -1);
 	void UpdateCallButton(BOOL forse = FALSE, int callsCount = -1);
 	void UpdateAccountIdentity();
+	void OpenAccountSidecar();
+	void CloseAccountSidecar();
+	void RepositionAccountSidecar();
 	void Action(DialerActions action);
 	void Clear(bool update=true);
 	void TimerVuMeter();
@@ -192,6 +199,7 @@ public:
 	afx_msg void OnBnClickedSpkClock();
 	afx_msg void OnBnClickedEchoTest();
 	afx_msg void OnBnClickedCallTrace();
+	afx_msg void OnBnClickedAccountSwitch();
 	afx_msg void OnBnClickedDelete();
 	afx_msg void OnRButtonUp( UINT nFlags, CPoint pt );
 	afx_msg void OnLButtonUp( UINT nFlags, CPoint pt );

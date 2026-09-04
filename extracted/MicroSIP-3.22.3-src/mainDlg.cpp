@@ -1851,6 +1851,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_WM_TIMER()
 	ON_WM_MOVE()
 	ON_WM_SIZE()
+	ON_WM_EXITSIZEMOVE()
 	ON_WM_CLOSE()
 	ON_WM_CTLCOLOR()
 	ON_WM_CONTEXTMENU()
@@ -1970,6 +1971,7 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	m_tabPrev = -1;
 	newMessages = false;
 	missed = false;
+	m_snappingMainWindow = false;
 
 	usersDirectoryLoaded = false;
 	shortcutsURLLoaded = false;
@@ -2218,6 +2220,7 @@ BOOL CmainDlg::OnInitDialog()
 	}
 	messagesDlg->SetWindowPos(NULL, messagesX, messagesY, messagesW, messagesH, SWP_NOZORDER);
 	SetWindowPos(accountSettings.alwaysOnTop ? &CWnd::wndTopMost : &CWnd::wndNoTopMost, mx, my, mW, mH, NULL);
+	SnapMainWindowToWorkArea();
 
 	imageListStatus = new CImageList();
 	imageListStatus->Create(16, 16, ILC_COLOR32, 3, 3);
@@ -5156,6 +5159,9 @@ void CmainDlg::OnSessionChange(UINT nSessionState, UINT nId)
 
 void CmainDlg::OnMove(int x, int y)
 {
+	if (pageDialer) {
+		pageDialer->RepositionAccountSidecar();
+	}
 	if (IsWindowVisible() && !IsZoomed() && !IsIconic()) {
 		CRect cRect;
 		GetWindowRect(&cRect);
@@ -5176,6 +5182,37 @@ void CmainDlg::OnSize(UINT type, int w, int h)
 		accountSettings.mainH = cRect.Height();
 		AccountSettingsPendingSave();
 	}
+}
+
+void CmainDlg::OnExitSizeMove()
+{
+	SnapMainWindowToWorkArea();
+}
+
+void CmainDlg::SnapMainWindowToWorkArea()
+{
+	if (m_snappingMainWindow || !::IsWindow(m_hWnd)) {
+		return;
+	}
+	MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+	if (!GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+		return;
+	}
+	CRect windowRect;
+	GetWindowRect(&windowRect);
+	int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
+	if (windowRect.top == monitorInfo.rcWork.top && windowRect.Height() == workHeight) {
+		return;
+	}
+	m_snappingMainWindow = true;
+	SetWindowPos(NULL, windowRect.left, monitorInfo.rcWork.top, windowRect.Width(), workHeight,
+		SWP_NOACTIVATE | SWP_NOZORDER);
+	m_snappingMainWindow = false;
+	accountSettings.mainX = windowRect.left;
+	accountSettings.mainY = monitorInfo.rcWork.top;
+	accountSettings.mainW = windowRect.Width();
+	accountSettings.mainH = workHeight;
+	AccountSettingsPendingSave();
 }
 
 void CmainDlg::LayoutFreepbxFooter()
