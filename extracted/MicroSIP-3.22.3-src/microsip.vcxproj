@@ -359,6 +359,7 @@
     <Image Include="res\unknown.ico" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="res\freepbxUK_Logo.png" />
     <None Include="res\dialog.rc2" />
     <None Include="res\main.rc2" />
     <None Include="res\menu.rc2" />

@@ -475,8 +475,8 @@ BOOL Dialer::OnInitDialog()
 	GetDlgItem(IDC_KEY_STAR)->SetFont(&m_font);
 	GetDlgItem(IDC_KEY_GRATE)->SetFont(&m_font);
 	GetDlgItem(IDC_KEY_PLUS)->SetFont(&m_font);
-	GetDlgItem(IDC_CLEAR)->SetFont(&m_font);
-	GetDlgItem(IDC_REDIAL)->SetFont(&m_font);
+	GetDlgItem(IDC_CLEAR)->SetFont(&m_font_call);
+	GetDlgItem(IDC_REDIAL)->SetFont(&m_font_call);
 	GetDlgItem(IDC_DELETE)->SetFont(&m_font);
 
 	m_ButtonCall.m_FaceColor = _GLOBAL_DIALER_CALL_COLOR;
@@ -598,6 +598,9 @@ BEGIN_MESSAGE_MAP(Dialer, CBaseDialog)
 	ON_BN_CLICKED(IDC_DELETE, &Dialer::OnBnClickedDelete)
 	ON_BN_CLICKED(IDC_KEY_PLUS, &Dialer::OnBnClickedKeyPlus)
 	ON_BN_CLICKED(IDC_CLEAR, &Dialer::OnBnClickedClear)
+	ON_BN_CLICKED(IDC_DIALER_SPK_CLOCK, &Dialer::OnBnClickedSpkClock)
+	ON_BN_CLICKED(IDC_DIALER_ECHO_TEST, &Dialer::OnBnClickedEchoTest)
+	ON_BN_CLICKED(IDC_DIALER_CALL_TRACE, &Dialer::OnBnClickedCallTrace)
 	ON_WM_HSCROLL()
 	ON_WM_CREATE()
 	ON_WM_DESTROY()
@@ -631,6 +634,14 @@ void Dialer::UpdateVoicemailButton(bool hasMail)
 
 void Dialer::RebuildButtons(bool init)
 {
+	if (IsChild(&m_ButtonSpkClock)) {
+		m_ButtonSpkClock.DestroyWindow();
+		m_ButtonEchoTest.DestroyWindow();
+		m_ButtonCallTrace.DestroyWindow();
+	}
+	if (IsChild(&m_AccountIdentity)) {
+		m_AccountIdentity.DestroyWindow();
+	}
 
 	if (accountSettings.accountId && !accountSettings.account.voicemailNumber.IsEmpty()) {
 		m_isButtonVoicemailVisible = true;
@@ -774,10 +785,52 @@ void Dialer::RebuildButtons(bool init)
 			rect.left -= stepPx;
 			rect.right -= stepPx;
 		}
+		CRect identityRect = rect;
+		identityRect.left = MulDiv(4, dpiY, 96);
+		m_AccountIdentity.Create(_T(""), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS, identityRect, this, IDC_DIALER_ACCOUNT_IDENTITY);
+		m_AccountIdentity.SetFont(GetFont());
+		AutoMove(m_AccountIdentity.m_hWnd, 100, 100, 0, 0);
+		UpdateAccountIdentity();
+
+		CRect utilityRect;
+		CRect clientRect;
+		GetClientRect(&clientRect);
+		utilityRect.left = MulDiv(4, dpiY, 96);
+		utilityRect.right = clientRect.right - MulDiv(4, dpiY, 96);
+		utilityRect.bottom = identityRect.top - MulDiv(3, dpiY, 96);
+		utilityRect.top = utilityRect.bottom - identityRect.Height();
+		int utilityWidth = utilityRect.Width() / 3;
+		CRect spkClockRect = utilityRect;
+		spkClockRect.right = spkClockRect.left + utilityWidth;
+		CRect echoTestRect = spkClockRect;
+		echoTestRect.OffsetRect(utilityWidth, 0);
+		CRect callTraceRect = utilityRect;
+		callTraceRect.left = echoTestRect.right;
+		m_ButtonSpkClock.Create(_T("Spk Clock"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, spkClockRect, this, IDC_DIALER_SPK_CLOCK);
+		m_ButtonEchoTest.Create(_T("Echo Test"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, echoTestRect, this, IDC_DIALER_ECHO_TEST);
+		m_ButtonCallTrace.Create(_T("Call Trace"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, callTraceRect, this, IDC_DIALER_CALL_TRACE);
+		m_ButtonSpkClock.SetFont(GetFont());
+		m_ButtonEchoTest.SetFont(GetFont());
+		m_ButtonCallTrace.SetFont(GetFont());
+		AutoMove(m_ButtonSpkClock.m_hWnd, 0, 100, 33, 0);
+		AutoMove(m_ButtonEchoTest.m_hWnd, 33, 100, 34, 0);
+		AutoMove(m_ButtonCallTrace.m_hWnd, 67, 100, 33, 0);
 		if (!init) {
 			SetWindowPos(NULL, 0, 0, windowRect.Width(), windowRect.Height(), SWP_NOZORDER | SWP_NOMOVE);
 		}
 	}
+}
+
+void Dialer::UpdateAccountIdentity()
+{
+	if (!IsChild(&m_AccountIdentity)) {
+		return;
+	}
+	CString identity = accountSettings.account.username;
+	if (!identity.IsEmpty() && !accountSettings.account.displayName.IsEmpty()) {
+		identity.Append(_T(" \x00b7 ") + accountSettings.account.displayName);
+	}
+	m_AccountIdentity.SetWindowText(identity);
 }
 
 void Dialer::OnTimer(UINT_PTR TimerVal)
@@ -1427,6 +1480,21 @@ void Dialer::OnBnClickedRedial()
 	if (!accountSettings.lastCallNumber.IsEmpty()) {
 		mainDlg->MakeCall(accountSettings.lastCallNumber, accountSettings.lastCallHasVideo, false, true);
 	}
+}
+
+void Dialer::OnBnClickedSpkClock()
+{
+	mainDlg->MakeCall(_T("*60"));
+}
+
+void Dialer::OnBnClickedEchoTest()
+{
+	mainDlg->MakeCall(_T("*43"));
+}
+
+void Dialer::OnBnClickedCallTrace()
+{
+	mainDlg->MakeCall(_T("*69"));
 }
 
 void Dialer::OnBnClickedDelete()

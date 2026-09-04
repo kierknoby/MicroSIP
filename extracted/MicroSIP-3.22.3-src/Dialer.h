@@ -59,6 +59,10 @@ class Dialer :
 	CButtonDialer m_ButtonDialerRedial;
 	CLevelsSliderCtrl m_SliderCtrlInput;
 	CLevelsSliderCtrl m_SliderCtrlOutput;
+	CButton m_ButtonSpkClock;
+	CButton m_ButtonEchoTest;
+	CButton m_ButtonCallTrace;
+	CStatic m_AccountIdentity;
 	HICON m_hIconMuteOutput;
 	HICON m_hIconMutedOutput;
 	HICON m_hIconMuteInput;
@@ -117,6 +121,7 @@ public:
 	void DialedAdd(CString number);
 	void SetNumber(CString  number, int callsCount = -1);
 	void UpdateCallButton(BOOL forse = FALSE, int callsCount = -1);
+	void UpdateAccountIdentity();
 	void Action(DialerActions action);
 	void Clear(bool update=true);
 	void TimerVuMeter();
@@ -184,6 +189,9 @@ public:
 	afx_msg void OnBnClickedKeyPlus();
 	afx_msg void OnBnClickedClear();
 	afx_msg void OnBnClickedRedial();
+	afx_msg void OnBnClickedSpkClock();
+	afx_msg void OnBnClickedEchoTest();
+	afx_msg void OnBnClickedCallTrace();
 	afx_msg void OnBnClickedDelete();
 	afx_msg void OnRButtonUp( UINT nFlags, CPoint pt );
 	afx_msg void OnLButtonUp( UINT nFlags, CPoint pt );

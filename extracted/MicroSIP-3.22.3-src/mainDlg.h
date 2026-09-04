@@ -21,6 +21,7 @@
 #include "stdafx.h"
 
 #include <afxwin.h>
+#include <gdiplus.h>
 
 #include "define.h"
 #include "json.h"
@@ -182,6 +183,8 @@ protected:
 	HICON iconMissed;
 	NOTIFYICONDATA tnd;
 	StatusBar m_bar;
+	class CFreepbxFooter* m_freepbxFooter;
+	ULONG_PTR m_gdiplusToken;
 	CMMNotificationClient *mmNotificationClient;
 
 	unsigned char m_tabPrev;
@@ -228,6 +231,7 @@ public:
 	afx_msg void OnContextMenu(CWnd *pWnd, CPoint point );
 	afx_msg BOOL OnDeviceChange(UINT nEventType, DWORD_PTR dwData);
 	afx_msg void OnSessionChange(UINT nSessionState, UINT nId);
+	void LayoutFreepbxFooter();
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnSize(UINT type, int w, int h);
 	afx_msg LRESULT onShellHookMessage(WPARAM wParam,LPARAM lParam);

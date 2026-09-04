@@ -50,11 +50,143 @@
 
 #include "iphlpapi.h"
 #include "wininet.h"
+#include <shellapi.h>
 #pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "gdiplus.lib")
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+class CmainDlg::CFreepbxFooter : public CWnd
+{
+public:
+	CFreepbxFooter() : image(NULL), stream(NULL), handCursor(NULL) {}
+	~CFreepbxFooter()
+	{
+		delete image;
+		if (stream) {
+			stream->Release();
+		}
+	}
+
+	bool LoadImageResource()
+	{
+		HINSTANCE instance = AfxGetResourceHandle();
+		HRSRC resource = FindResource(instance, MAKEINTRESOURCE(IDR_FREEPBXUK_LOGO), RT_RCDATA);
+		if (!resource) {
+			return false;
+		}
+		HGLOBAL loaded = LoadResource(instance, resource);
+		DWORD size = SizeofResource(instance, resource);
+		if (!loaded || !size) {
+			return false;
+		}
+		HGLOBAL buffer = GlobalAlloc(GMEM_MOVEABLE, size);
+		if (!buffer) {
+			return false;
+		}
+		void* destination = GlobalLock(buffer);
+		memcpy(destination, LockResource(loaded), size);
+		GlobalUnlock(buffer);
+		if (CreateStreamOnHGlobal(buffer, TRUE, &stream) != S_OK) {
+			GlobalFree(buffer);
+			return false;
+		}
+		image = Gdiplus::Bitmap::FromStream(stream, FALSE);
+		return image && image->GetLastStatus() == Gdiplus::Ok;
+	}
+
+protected:
+	afx_msg BOOL OnEraseBkgnd(CDC*) { return TRUE; }
+	afx_msg void OnPaint()
+	{
+		CPaintDC dc(this);
+		CRect client;
+		GetClientRect(&client);
+		Gdiplus::Graphics graphics(dc.m_hDC);
+		COLORREF background = GetSysColor(COLOR_3DFACE);
+		graphics.Clear(Gdiplus::Color(255, GetRValue(background), GetGValue(background), GetBValue(background)));
+		if (!image) {
+			return;
+		}
+		const int margin = MulDiv(16, dpiY, 96);
+		double scale = min(
+			(double)(client.Width() - margin * 2) / image->GetWidth(),
+			(double)(client.Height() - margin * 2) / image->GetHeight());
+		scale = min(1.0, max(0.0, scale));
+		int width = (int)(image->GetWidth() * scale);
+		int height = (int)(image->GetHeight() * scale);
+		int left = (client.Width() - width) / 2;
+		int top = margin;
+		freepbxLinkRect = CRect(left, top, left + width, top + height);
+		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+		graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
+
+		Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(8, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+		Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 100, 100, 100));
+		Gdiplus::SolidBrush linkBrush(Gdiplus::Color(255, 40, 90, 150));
+		Gdiplus::RectF measured;
+		const WCHAR* prefix = L"Powered by ";
+		const WCHAR* link = L"MicroSIP";
+		const WCHAR* suffix = L" \x2013 SIP Softphone for Windows";
+		graphics.MeasureString(prefix, -1, &font, Gdiplus::PointF(0, 0), &measured);
+		Gdiplus::REAL prefixWidth = measured.Width;
+		graphics.MeasureString(link, -1, &font, Gdiplus::PointF(0, 0), &measured);
+		Gdiplus::REAL linkWidth = measured.Width;
+		Gdiplus::REAL suffixWidth;
+		graphics.MeasureString(suffix, -1, &font, Gdiplus::PointF(0, 0), &measured);
+		suffixWidth = measured.Width;
+		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth;
+		Gdiplus::REAL textX = (Gdiplus::REAL)((client.Width() - textWidth) / 2);
+		Gdiplus::REAL textY = (Gdiplus::REAL)(client.Height() - margin - MulDiv(10, dpiY, 96));
+		graphics.DrawString(prefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
+		textX += prefixWidth;
+		microsipLinkRect = CRect((int)textX, (int)textY, (int)(textX + linkWidth), (int)(textY + MulDiv(12, dpiY, 96)));
+		graphics.DrawString(link, -1, &font, Gdiplus::PointF(textX, textY), &linkBrush);
+		textX += linkWidth;
+		graphics.DrawString(suffix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
+	}
+	afx_msg void OnLButtonUp(UINT nFlags, CPoint point)
+	{
+		if (freepbxLinkRect.PtInRect(point)) {
+			ShellExecute(NULL, _T("open"), _T("https://freepbx.uk"), NULL, NULL, SW_SHOWNORMAL);
+		}
+		else if (microsipLinkRect.PtInRect(point)) {
+			ShellExecute(NULL, _T("open"), _T("https://www.microsip.org/"), NULL, NULL, SW_SHOWNORMAL);
+		}
+		CWnd::OnLButtonUp(nFlags, point);
+	}
+	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
+	{
+		CPoint point;
+		GetCursorPos(&point);
+		ScreenToClient(&point);
+		if (freepbxLinkRect.PtInRect(point) || microsipLinkRect.PtInRect(point)) {
+			if (!handCursor) {
+				handCursor = LoadCursor(NULL, IDC_HAND);
+			}
+			SetCursor(handCursor);
+			return TRUE;
+		}
+		return CWnd::OnSetCursor(pWnd, nHitTest, message);
+	}
+	DECLARE_MESSAGE_MAP()
+
+private:
+	Gdiplus::Bitmap* image;
+	IStream* stream;
+	CRect freepbxLinkRect;
+	CRect microsipLinkRect;
+	HCURSOR handCursor;
+};
+
+BEGIN_MESSAGE_MAP(CmainDlg::CFreepbxFooter, CWnd)
+	ON_WM_ERASEBKGND()
+	ON_WM_PAINT()
+	ON_WM_LBUTTONUP()
+	ON_WM_SETCURSOR()
+END_MESSAGE_MAP()
 
 CmainDlg* mainDlg;
 
@@ -62,6 +194,13 @@ static UINT WM_SHELLHOOKMESSAGE;
 static UINT WM_TASKBARRESTARTMESSAGE;
 
 static bool updateCheckerShow;
+
+static bool upstream_updates_enabled()
+{
+	// Upstream MicroSIP updates are disabled in the FreePBX UK fork.
+	// Fork updates must not replace this build with an upstream MicroSIP release.
+	return false;
+}
 
 static UINT BASED_CODE indicators[] =
 {
@@ -1661,6 +1800,15 @@ static DWORD WINAPI NetworkChangeThread(LPVOID lpParam)
 
 CmainDlg::~CmainDlg(void)
 {
+	if (m_freepbxFooter) {
+		m_freepbxFooter->DestroyWindow();
+		delete m_freepbxFooter;
+		m_freepbxFooter = NULL;
+	}
+	if (m_gdiplusToken) {
+		Gdiplus::GdiplusShutdown(m_gdiplusToken);
+		m_gdiplusToken = 0;
+	}
 }
 
 void CmainDlg::OnDestroy()
@@ -1809,6 +1957,8 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 
 	this->m_hWnd = NULL;
 	mmNotificationClient = NULL;
+	m_freepbxFooter = NULL;
+	m_gdiplusToken = 0;
 	updateCheckerShow = false;
 
 	pageCalls = NULL;
@@ -1944,6 +2094,8 @@ int CmainDlg::OnCreate(LPCREATESTRUCT lpCreateStruct)
 BOOL CmainDlg::OnInitDialog()
 {
 	CBaseDialog::OnInitDialog();
+	Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+	Gdiplus::GdiplusStartup(&m_gdiplusToken, &gdiplusStartupInput, NULL);
 
 	WTSRegisterSessionNotification(m_hWnd, NOTIFY_FOR_THIS_SESSION);
 	mmNotificationClient = new CMMNotificationClient();
@@ -1992,6 +2144,9 @@ BOOL CmainDlg::OnInitDialog()
 	m_bar.SetPaneInfo(IDS_STATUSBAR, IDS_STATUSBAR, SBPS_STRETCH, 0);
 	m_bar.SetPaneInfo(IDS_STATUSBAR2, IDS_STATUSBAR2, SBPS_NOBORDERS, 0);
 	RepositionBars(AFX_IDW_CONTROLBAR_FIRST, AFX_IDW_CONTROLBAR_LAST, IDS_STATUSBAR);
+	m_freepbxFooter = new CFreepbxFooter();
+	m_freepbxFooter->CreateEx(0, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL, WS_CHILD | WS_VISIBLE, CRect(0, 0, 0, 0), this, 0);
+	m_freepbxFooter->LoadImageResource();
 
 	AutoMove(m_bar.m_hWnd, 0, 100, 100, 0);
 	//--set window pos
@@ -2161,6 +2316,7 @@ BOOL CmainDlg::OnInitDialog()
 
 	InitUI();
 	OnAccountChanged(true);
+	LayoutFreepbxFooter();
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -2977,7 +3133,7 @@ void CmainDlg::PJCreateRaw()
 	}
 
 	// check updates
-	if (accountSettings.updatesInterval != _T("never"))
+	if (upstream_updates_enabled() && accountSettings.updatesInterval != _T("never"))
 	{
 		CTime t = CTime::GetCurrentTime();
 		time_t time = t.GetTime();
@@ -5012,12 +5168,44 @@ void CmainDlg::OnMove(int x, int y)
 void CmainDlg::OnSize(UINT type, int w, int h)
 {
 	CBaseDialog::OnSize(type, w, h);
+	LayoutFreepbxFooter();
 	if (this->IsWindowVisible() && type == SIZE_RESTORED) {
 		CRect cRect;
 		GetWindowRect(&cRect);
 		accountSettings.mainW = cRect.Width();
 		accountSettings.mainH = cRect.Height();
 		AccountSettingsPendingSave();
+	}
+}
+
+void CmainDlg::LayoutFreepbxFooter()
+{
+	if (!m_freepbxFooter || !::IsWindow(m_freepbxFooter->m_hWnd) || !::IsWindow(m_bar.m_hWnd)) {
+		return;
+	}
+	CRect client;
+	CRect status;
+	GetClientRect(&client);
+	m_bar.GetWindowRect(&status);
+	ScreenToClient(&status);
+	int footerHeight = MulDiv(76, dpiY, 96);
+	int top = max(0, status.top - footerHeight);
+	m_freepbxFooter->SetWindowPos(NULL, 0, top, client.Width(), status.top - top, SWP_NOACTIVATE | SWP_NOZORDER);
+	CTabCtrl* tab = (CTabCtrl*)GetDlgItem(IDC_MAIN_TAB);
+	if (tab && ::IsWindow(tab->m_hWnd)) {
+		CRect tabRect;
+		tab->GetWindowRect(&tabRect);
+		ScreenToClient(&tabRect);
+		tab->SetWindowPos(NULL, tabRect.left, tabRect.top, tabRect.Width(), max(0, top - tabRect.top), SWP_NOACTIVATE | SWP_NOZORDER);
+	}
+	CWnd* pages[] = { pageDialer, pageCalls, pageContacts };
+	for (CWnd* page : pages) {
+		if (page && ::IsWindow(page->m_hWnd)) {
+			CRect pageRect;
+			page->GetWindowRect(&pageRect);
+			ScreenToClient(&pageRect);
+			page->SetWindowPos(NULL, pageRect.left, pageRect.top, pageRect.Width(), max(0, top - pageRect.top), SWP_NOACTIVATE | SWP_NOZORDER);
+		}
 	}
 }
 
@@ -5559,6 +5747,7 @@ void CmainDlg::OnAccountChanged(bool init)
 	if (!init) {
 		pageDialer->RebuildButtons();
 	}
+	pageDialer->UpdateAccountIdentity();
 }
 
 void CmainDlg::OpenTransferDlg(CWnd * pParent, msip_action action, pjsua_call_id call_id, Contact * selectedContact)
@@ -5574,12 +5763,18 @@ void CmainDlg::OpenTransferDlg(CWnd * pParent, msip_action action, pjsua_call_id
 
 void CmainDlg::OnCheckUpdates()
 {
+	if (!upstream_updates_enabled()) {
+		return;
+	}
 	updateCheckerShow = true;
 	CheckUpdates();
 }
 
 void CmainDlg::CheckUpdates()
 {
+	if (!upstream_updates_enabled()) {
+		return;
+	}
 	CString url;
 	url = _T("http://update.microsip.org/softphone-update.txt");
 	url.AppendFormat(_T("?version=%s&client=%s"), _T(_GLOBAL_VERSION), CString(urlencode(MSIP::Utf8EncodeUni(CString(_T(_GLOBAL_NAME_VISIBLE))))));
@@ -5593,6 +5788,11 @@ LRESULT CmainDlg::OnUpdateCheckerLoaded(WPARAM wParam, LPARAM lParam)
 {
 	bool found = false;
 	URLGetAsyncData* response = (URLGetAsyncData*)wParam;
+	if (!upstream_updates_enabled()) {
+		delete response;
+		updateCheckerShow = false;
+		return 0;
+	}
 	if (response->statusCode == 200) {
 		if (!response->body.IsEmpty() && response->body.Left(4) == "http") {
 			int pos = response->body.Find("\n");

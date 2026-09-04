@@ -60,6 +60,8 @@ END
 LANGUAGE 9, 1
 #pragma code_page(1252)
 
+IDR_FREEPBXUK_LOGO RCDATA "res\\freepbxUK_Logo.png"
+
 #endif
 /////////////////////////////////////////////////////////////////////////////
 
