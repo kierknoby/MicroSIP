@@ -2288,7 +2288,6 @@ BOOL CmainDlg::OnInitDialog()
 	int pageWidth = pageRect.Width() + (clientRect.Width() - pageRect.Width()) / 3;
 	int offsetX = (clientRect.Width() - pageWidth) / 2;
 	pageDialer->SetWindowPos(NULL, offsetX, offset, pageWidth, pageRect.Height(), SWP_NOZORDER);
-	AutoMove(pageDialer->m_hWnd, 40, 40, 20, 20);
 
 		pageCalls = new Calls(this);
 		pageCalls->OnCreated();
@@ -5229,22 +5228,6 @@ void CmainDlg::LayoutFreepbxFooter()
 	int footerHeight = MulDiv(76, dpiY, 96);
 	int top = max(0, status.top - footerHeight);
 	m_freepbxFooter->SetWindowPos(NULL, 0, top, client.Width(), status.top - top, SWP_NOACTIVATE | SWP_NOZORDER);
-	CTabCtrl* tab = (CTabCtrl*)GetDlgItem(IDC_MAIN_TAB);
-	if (tab && ::IsWindow(tab->m_hWnd)) {
-		CRect tabRect;
-		tab->GetWindowRect(&tabRect);
-		ScreenToClient(&tabRect);
-		tab->SetWindowPos(NULL, tabRect.left, tabRect.top, tabRect.Width(), max(0, top - tabRect.top), SWP_NOACTIVATE | SWP_NOZORDER);
-	}
-	CWnd* pages[] = { pageDialer, pageCalls, pageContacts };
-	for (CWnd* page : pages) {
-		if (page && ::IsWindow(page->m_hWnd)) {
-			CRect pageRect;
-			page->GetWindowRect(&pageRect);
-			ScreenToClient(&pageRect);
-			page->SetWindowPos(NULL, pageRect.left, pageRect.top, pageRect.Width(), max(0, top - pageRect.top), SWP_NOACTIVATE | SWP_NOZORDER);
-		}
-	}
 }
 
 void CmainDlg::SetupJumpList()
