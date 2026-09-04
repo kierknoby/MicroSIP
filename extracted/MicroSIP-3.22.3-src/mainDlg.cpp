@@ -5668,7 +5668,10 @@ void CmainDlg::AppBarUpdateDock(bool allowDockChange)
 	data.hWnd = m_hWnd;
 	if (!m_appBarRegistered) {
 		data.uCallbackMessage = WM_APPBAR_CALLBACK;
-		if (!SHAppBarMessage(ABM_NEW, &data)) {
+		UINT_PTR registered = SHAppBarMessage(ABM_NEW, &data);
+		PJ_LOG(3, (THIS_FILENAME, "AppBar ABM_NEW returned: %u (hWnd=%p, callback=0x%04X)",
+			(unsigned)registered, m_hWnd, (unsigned)WM_APPBAR_CALLBACK));
+		if (!registered) {
 			return;
 		}
 		m_appBarRegistered = true;
@@ -5708,14 +5711,22 @@ void CmainDlg::AppBarApplyPosition()
 	else {
 		data.rc.left = data.rc.right - visibleWidth;
 	}
-	SHAppBarMessage(ABM_QUERYPOS, &data);
+	PJ_LOG(3, (THIS_FILENAME, "AppBar requested rect: edge=%u l=%ld t=%ld r=%ld b=%ld (visibleWidth=%d)",
+		(unsigned)m_appBarEdge, data.rc.left, data.rc.top, data.rc.right, data.rc.bottom, visibleWidth));
+	UINT_PTR queried = SHAppBarMessage(ABM_QUERYPOS, &data);
+	PJ_LOG(3, (THIS_FILENAME, "AppBar ABM_QUERYPOS returned: %u shell-adjusted rect: l=%ld t=%ld r=%ld b=%ld",
+		(unsigned)queried, data.rc.left, data.rc.top, data.rc.right, data.rc.bottom));
 	if (m_appBarEdge == ABE_LEFT) {
 		data.rc.right = data.rc.left + visibleWidth;
 	}
 	else {
 		data.rc.left = data.rc.right - visibleWidth;
 	}
-	SHAppBarMessage(ABM_SETPOS, &data);
+	MONITORINFO before = { sizeof(MONITORINFO) };
+	GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &before);
+	UINT_PTR positioned = SHAppBarMessage(ABM_SETPOS, &data);
+	PJ_LOG(3, (THIS_FILENAME, "AppBar ABM_SETPOS returned: %u final appbar rect: l=%ld t=%ld r=%ld b=%ld",
+		(unsigned)positioned, data.rc.left, data.rc.top, data.rc.right, data.rc.bottom));
 
 	m_appBarPositioning = true;
 	SetWindowPos(NULL, data.rc.left - leftInset, data.rc.top - topInset,
@@ -5726,6 +5737,12 @@ void CmainDlg::AppBarApplyPosition()
 	APPBARDATA changed = { sizeof(APPBARDATA) };
 	changed.hWnd = m_hWnd;
 	SHAppBarMessage(ABM_WINDOWPOSCHANGED, &changed);
+
+	MONITORINFO after = { sizeof(MONITORINFO) };
+	GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &after);
+	PJ_LOG(3, (THIS_FILENAME, "AppBar work area before: l=%ld t=%ld r=%ld b=%ld after: l=%ld t=%ld r=%ld b=%ld",
+		before.rcWork.left, before.rcWork.top, before.rcWork.right, before.rcWork.bottom,
+		after.rcWork.left, after.rcWork.top, after.rcWork.right, after.rcWork.bottom));
 
 	accountSettings.mainX = data.rc.left - leftInset;
 	accountSettings.mainY = data.rc.top - topInset;
@@ -5739,7 +5756,8 @@ void CmainDlg::AppBarRemove()
 	}
 	APPBARDATA data = { sizeof(APPBARDATA) };
 	data.hWnd = m_hWnd;
-	SHAppBarMessage(ABM_REMOVE, &data);
+	UINT_PTR removed = SHAppBarMessage(ABM_REMOVE, &data);
+	PJ_LOG(3, (THIS_FILENAME, "AppBar ABM_REMOVE returned: %u", (unsigned)removed));
 	m_appBarRegistered = false;
 }
 
@@ -5759,18 +5777,34 @@ void CmainDlg::SnapMainWindowToWorkArea()
 		visibleRect = windowRect;
 	}
 	int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
+	int leftInset = visibleRect.left - windowRect.left;
+	int rightInset = windowRect.right - visibleRect.right;
 	int topInset = visibleRect.top - windowRect.top;
 	int bottomInset = windowRect.bottom - visibleRect.bottom;
 	int targetTop = monitorInfo.rcWork.top - topInset;
 	int targetHeight = workHeight + topInset + bottomInset;
-	if (visibleRect.top == monitorInfo.rcWork.top && visibleRect.bottom == monitorInfo.rcWork.bottom) {
+
+	// Clamp the visible frame horizontally; x only, width is never changed.
+	int targetLeft = windowRect.left;
+	int visibleLeft = windowRect.left + leftInset;
+	int visibleRight = windowRect.right - rightInset;
+	if (visibleLeft < monitorInfo.rcWork.left) {
+		targetLeft += monitorInfo.rcWork.left - visibleLeft;
+	}
+	else if (visibleRight > monitorInfo.rcWork.right) {
+		targetLeft -= visibleRight - monitorInfo.rcWork.right;
+	}
+
+	if (targetLeft == windowRect.left
+		&& visibleRect.top == monitorInfo.rcWork.top
+		&& visibleRect.bottom == monitorInfo.rcWork.bottom) {
 		return;
 	}
 	m_snappingMainWindow = true;
-	SetWindowPos(NULL, windowRect.left, targetTop, windowRect.Width(), targetHeight,
+	SetWindowPos(NULL, targetLeft, targetTop, windowRect.Width(), targetHeight,
 		SWP_NOACTIVATE | SWP_NOZORDER);
 	m_snappingMainWindow = false;
-	accountSettings.mainX = windowRect.left;
+	accountSettings.mainX = targetLeft;
 	accountSettings.mainY = targetTop;
 	accountSettings.mainW = windowRect.Width();
 	accountSettings.mainH = targetHeight;
