@@ -81,10 +81,11 @@ jobs:
           if (!$opusLibrary) { throw "Opus build did not produce opus.lib" }
           $opusLibraryDir = Join-Path $buildRoot 'third_party\opus\Win32'
           $opusIncludeDir = Join-Path $buildRoot 'third_party\opus\include'
-          New-Item -ItemType Directory -Path $opusLibraryDir -Force | Out-Null
+          $opusSubIncludeDir = Join-Path $opusIncludeDir 'opus'
+          New-Item -ItemType Directory -Path $opusLibraryDir, $opusSubIncludeDir -Force | Out-Null
           Copy-Item $opusLibrary.FullName "$opusLibraryDir\opus.lib"
           Copy-Item $opusLibrary.FullName "$opusLibraryDir\libopus.a"
-          Copy-Item "$opusRoot\include" $opusIncludeDir -Recurse
+          Copy-Item "$opusRoot\include\*" $opusSubIncludeDir -Recurse -Force
 
       - name: Build PJProject static library
         shell: pwsh
