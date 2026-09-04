@@ -1962,6 +1962,7 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	m_gdiplusToken = 0;
 	updateCheckerShow = false;
 
+	pageDialer = NULL;
 	pageCalls = NULL;
 	pageContacts = NULL;
 	mainDlg = this;
