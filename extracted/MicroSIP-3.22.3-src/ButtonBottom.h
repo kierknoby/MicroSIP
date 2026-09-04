@@ -27,6 +27,7 @@ class CButtonBottom : public CMFCButton
 public: 
 	CButtonBottom();
 	virtual ~CButtonBottom();
+	void SetDarkMode(bool enabled);
 private:
 	COLORREF m_clrButton;
 	COLORREF m_clrButtonHover;

@@ -105,6 +105,7 @@ struct AccountSettings {
 
 	int activeTab;
 	bool alwaysOnTop;
+	bool darkMode;
 	bool multiMonitor;
 	bool networkChanges;
 

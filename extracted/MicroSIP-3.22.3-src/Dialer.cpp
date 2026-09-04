@@ -18,6 +18,7 @@
 
 #include "StdAfx.h"
 #include "Dialer.h"
+#include <uxtheme.h>
 #include "global.h"
 #include "settings.h"
 #include "mainDlg.h"
@@ -32,7 +33,7 @@ static CString digitsDTMFDelayed;
 class Dialer::CAccountSidecar : public CWnd
 {
 public:
-	CAccountSidecar(Dialer* owner) : owner(owner) {}
+	CAccountSidecar(Dialer* owner) : owner(owner), darkMode(false) {}
 	~CAccountSidecar()
 	{
 		for (int i = 0; i < buttons.GetCount(); i++) {
@@ -98,9 +99,40 @@ public:
 		if (buttons.GetCount()) {
 			buttons[0]->SetFocus();
 		}
+		SetDarkMode(accountSettings.darkMode);
+	}
+
+	void SetDarkMode(bool enabled)
+	{
+		darkMode = enabled;
+		LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
+		for (int i = 0; i < buttons.GetCount(); i++) {
+			SetWindowTheme(buttons[i]->m_hWnd, theme, NULL);
+		}
+		RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 	}
 
 protected:
+	afx_msg BOOL OnEraseBkgnd(CDC* dc)
+	{
+		if (darkMode) {
+			CRect rect;
+			GetClientRect(&rect);
+			dc->FillSolidRect(rect, RGB(30, 34, 38));
+			return TRUE;
+		}
+		return CWnd::OnEraseBkgnd(dc);
+	}
+	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd*, UINT controlColor)
+	{
+		if (darkMode && (controlColor == CTLCOLOR_STATIC || controlColor == CTLCOLOR_DLG)) {
+			static CBrush darkBrush(RGB(30, 34, 38));
+			dc->SetTextColor(RGB(235, 238, 241));
+			dc->SetBkColor(RGB(30, 34, 38));
+			return darkBrush;
+		}
+		return CWnd::OnCtlColor(dc, NULL, controlColor);
+	}
 	afx_msg void OnKillFocus(CWnd* newWindow)
 	{
 		if (newWindow && (newWindow == owner || owner->IsChild(newWindow) || IsChild(newWindow))) {
@@ -143,12 +175,15 @@ protected:
 
 private:
 	Dialer* owner;
+	bool darkMode;
 	CArray<CButton*, CButton*> buttons;
 	CArray<int, int> accountIds;
 	CStatic emptyState;
 };
 
 BEGIN_MESSAGE_MAP(Dialer::CAccountSidecar, CWnd)
+	ON_WM_ERASEBKGND()
+	ON_WM_CTLCOLOR()
 	ON_WM_KILLFOCUS()
 	ON_WM_ACTIVATE()
 	ON_WM_KEYDOWN()
@@ -581,8 +616,6 @@ BOOL Dialer::OnInitDialog()
 	//--
 	lf.lfHeight = -MulDiv(13, dpiY, 96);
 	m_font_call.CreateFontIndirect(&lf);
-	lf.lfHeight = -MulDiv(15, dpiY, 96);
-	m_font_accountIdentity.CreateFontIndirect(&lf);
 	//--
 	lf.lfHeight = -MulDiv(19, dpiY, 96);
 	m_font.CreateFontIndirect(&lf);
@@ -943,7 +976,7 @@ void Dialer::RebuildButtons(bool init)
 		}
 		identityRect.left = switchRect.right + MulDiv(4, dpiY, 96);
 		m_AccountIdentity.Create(_T(""), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS, identityRect, this, IDC_DIALER_ACCOUNT_IDENTITY);
-		m_AccountIdentity.SetFont(&m_font_accountIdentity);
+		m_AccountIdentity.SetFont(GetFont());
 		AutoMove(m_AccountIdentity.m_hWnd, 100, 100, 0, 0);
 		UpdateAccountIdentity();
 
@@ -963,6 +996,7 @@ void Dialer::RebuildButtons(bool init)
 		AutoMove(m_ButtonSpkClock.m_hWnd, 0, 100, 33, 0);
 		AutoMove(m_ButtonEchoTest.m_hWnd, 33, 100, 34, 0);
 		AutoMove(m_ButtonCallTrace.m_hWnd, 67, 100, 33, 0);
+		SetDarkMode(accountSettings.darkMode);
 		if (!init) {
 			SetWindowPos(NULL, 0, 0, windowRect.Width(), windowRect.Height(), SWP_NOZORDER | SWP_NOMOVE);
 		}
@@ -975,10 +1009,31 @@ void Dialer::UpdateAccountIdentity()
 		return;
 	}
 	CString identity = accountSettings.account.username;
-	if (!identity.IsEmpty() && !accountSettings.account.displayName.IsEmpty()) {
-		identity.Append(_T(" \x00b7 ") + accountSettings.account.displayName);
-	}
 	m_AccountIdentity.SetWindowText(identity);
+}
+
+void Dialer::SetDarkMode(bool enabled)
+{
+	m_ButtonCall.m_FaceColor = enabled ? RGB(43, 48, 54) : _GLOBAL_DIALER_CALL_COLOR;
+	m_ButtonCall.m_TextColor = RGB(255, 255, 255);
+	m_ButtonEnd.m_FaceColor = enabled ? RGB(43, 48, 54) : _GLOBAL_DIALER_END_COLOR;
+	m_ButtonEnd.m_TextColor = RGB(255, 255, 255);
+	m_ButtonDND.SetDarkMode(enabled);
+	m_ButtonFWD.SetDarkMode(enabled);
+	m_ButtonAA.SetDarkMode(enabled);
+	m_ButtonAC.SetDarkMode(enabled);
+	m_ButtonRec.SetDarkMode(enabled);
+	m_ButtonConf.SetDarkMode(enabled);
+	LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
+	SetWindowTheme(m_ButtonSpkClock.m_hWnd, theme, NULL);
+	SetWindowTheme(m_ButtonEchoTest.m_hWnd, theme, NULL);
+	SetWindowTheme(m_ButtonCallTrace.m_hWnd, theme, NULL);
+	SetWindowTheme(m_AccountSwitch.m_hWnd, theme, NULL);
+	SetWindowTheme(GetDlgItem(IDC_NUMBER)->m_hWnd, theme, NULL);
+	if (m_accountSidecar) {
+		m_accountSidecar->SetDarkMode(enabled);
+	}
+	RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 }
 
 void Dialer::OpenAccountSidecar()
@@ -987,6 +1042,7 @@ void Dialer::OpenAccountSidecar()
 		m_accountSidecar = new CAccountSidecar(this);
 		m_accountSidecar->CreateEx(WS_EX_TOOLWINDOW, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL, WS_POPUP | WS_BORDER, CRect(0, 0, 0, 0), GetParent(), 0);
 	}
+	m_accountSidecar->SetDarkMode(accountSettings.darkMode);
 	m_accountSidecar->ShowAccounts();
 }
 
@@ -1234,6 +1290,12 @@ BOOL Dialer::PreTranslateMessage(MSG* pMsg)
 
 HBRUSH Dialer::OnCtlColor(CDC* pDC, CWnd *pWnd, UINT nCtlColor)
 {
+	if (accountSettings.darkMode && (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
+		static CBrush darkBrush(RGB(30, 34, 38));
+		pDC->SetTextColor(RGB(235, 238, 241));
+		pDC->SetBkColor(RGB(30, 34, 38));
+		return darkBrush;
+	}
 	HBRUSH br = CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);
 	if (pWnd == &m_ButtonMinusInput
 		|| pWnd == &m_ButtonMinusOutput

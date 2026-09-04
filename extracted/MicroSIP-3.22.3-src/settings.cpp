@@ -797,6 +797,11 @@ void AccountSettings::Init()
     alwaysOnTop = _wtoi(str);
 
     ptr = str.GetBuffer(255);
+    GetPrivateProfileString(section, _T("darkMode"), NULL, ptr, 256, iniFile);
+    str.ReleaseBuffer();
+    darkMode = _wtoi(str);
+
+    ptr = str.GetBuffer(255);
     GetPrivateProfileString(section, _T("enableShortcuts"), NULL, ptr, 256, iniFile);
     str.ReleaseBuffer();
     enableShortcuts = _wtoi(str);
@@ -1251,6 +1256,7 @@ void AccountSettings::SettingsSave()
     WritePrivateProfileString(section, _T("DND"), DND ? _T("1") : _T("0"), iniFile);
     str.Format(_T("%d"), alwaysOnTop);
     WritePrivateProfileString(section, _T("alwaysOnTop"), str, iniFile);
+    WritePrivateProfileString(section, _T("darkMode"), darkMode ? _T("1") : _T("0"), iniFile);
 
     WritePrivateProfileString(section, _T("enableShortcuts"), enableShortcuts ? _T("1") : _T("0"), iniFile);
     WritePrivateProfileString(section, _T("shortcutsBottom"), shortcutsBottom ? _T("1") : _T("0"), iniFile);

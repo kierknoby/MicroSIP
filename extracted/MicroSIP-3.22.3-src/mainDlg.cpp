@@ -51,8 +51,12 @@
 #include "iphlpapi.h"
 #include "wininet.h"
 #include <shellapi.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "gdiplus.lib")
+#pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "uxtheme.lib")
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -105,7 +109,7 @@ protected:
 		CRect client;
 		GetClientRect(&client);
 		Gdiplus::Graphics graphics(dc.m_hDC);
-		COLORREF background = GetSysColor(COLOR_3DFACE);
+		COLORREF background = accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE);
 		graphics.Clear(Gdiplus::Color(255, GetRValue(background), GetGValue(background), GetBValue(background)));
 		if (!image) {
 			return;
@@ -127,7 +131,7 @@ protected:
 		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
 		graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
 
-		Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 100, 100, 100));
+		Gdiplus::SolidBrush textBrush(accountSettings.darkMode ? Gdiplus::Color(255, 190, 196, 202) : Gdiplus::Color(255, 100, 100, 100));
 		Gdiplus::SolidBrush linkBrush(Gdiplus::Color(255, 40, 90, 150));
 		Gdiplus::RectF measured;
 		const WCHAR* prefix = L"Powered by ";
@@ -1898,6 +1902,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_COMMAND(ID_SETTINGS, OnMenuSettings)
 	ON_COMMAND(ID_SHORTCUTS, OnMenuShortcuts)
 	ON_COMMAND(ID_ALWAYS_ON_TOP, OnMenuAlwaysOnTop)
+	ON_COMMAND(ID_DARK_MODE, OnMenuDarkMode)
 	ON_COMMAND(ID_LOG, OnMenuLog)
 	ON_COMMAND(ID_EXIT, OnMenuExit)
 	ON_NOTIFY(TCN_SELCHANGE, IDC_MAIN_TAB, &CmainDlg::OnTcnSelchangeTab)
@@ -2323,6 +2328,7 @@ BOOL CmainDlg::OnInitDialog()
 	InitUI();
 	OnAccountChanged(true);
 	LayoutFreepbxFooter();
+	ApplyDarkMode();
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -2522,6 +2528,34 @@ void CmainDlg::OnMenuAlwaysOnTop()
 	SetWindowPos(accountSettings.alwaysOnTop ? &this->wndTopMost : &this->wndNoTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 }
 
+void CmainDlg::ApplyDarkMode()
+{
+	BOOL enabled = accountSettings.darkMode ? TRUE : FALSE;
+	if (FAILED(DwmSetWindowAttribute(m_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &enabled, sizeof(enabled)))) {
+		enabled = FALSE;
+	}
+	SetWindowTheme(m_ButtonMenu.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
+	CStatusBarCtrl& statusctrl = m_bar.GetStatusBarCtrl();
+	statusctrl.SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
+	statusctrl.SetTextColor(accountSettings.darkMode ? RGB(235, 238, 241) : GetSysColor(COLOR_WINDOWTEXT));
+	if (pageDialer) {
+		pageDialer->SetDarkMode(accountSettings.darkMode);
+	}
+	if (m_freepbxFooter) {
+		m_freepbxFooter->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	}
+	m_ButtonMenu.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	m_bar.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+}
+
+void CmainDlg::OnMenuDarkMode()
+{
+	accountSettings.darkMode = !accountSettings.darkMode;
+	AccountSettingsPendingSave();
+	ApplyDarkMode();
+}
+
 void CmainDlg::OnMenuLog()
 {
 	MSIP::OpenFile(accountSettings.logFile);
@@ -2693,6 +2727,7 @@ void CmainDlg::MainPopupMenu(bool isMenuButton)
             separator = true;
         }
         tracker->AppendMenu(MF_STRING | (accountSettings.alwaysOnTop ? MF_CHECKED : 0), ID_ALWAYS_ON_TOP, Translate(_T("Always on Top")));
+		tracker->AppendMenu(MF_STRING | (accountSettings.darkMode ? MF_CHECKED : 0), ID_DARK_MODE, Translate(_T("Dark Mode")));
 			if (!separator) {
 				tracker->AppendMenu(MF_SEPARATOR);
 				separator = true;
@@ -3795,7 +3830,7 @@ void CmainDlg::PJAccountAddRaw()
 	if (!titleAdder.IsEmpty()) {
 		title.AppendFormat(_T(" - %s"), titleAdder);
 	}
-	SetPaneText2(accountSettings.account.username);
+	SetPaneText2(get_account_server());
 	SetWindowText(title);
 	pageDialer->SetName();
 
@@ -5014,10 +5049,10 @@ void CmainDlg::SetPaneText2(CString str)
 		if (pDC && pDC->m_hAttribDC) {
 			CSize size = pDC->GetTextExtent(str);
 			m_bar.ReleaseDC(pDC);
-            width = MulDiv(size.cx * 0.85, dpiY, 96);
+			width = size.cx + MulDiv(12, dpiY, 96);
 		}
 		else {
-			width = MulDiv(7 * str.GetLength(), dpiY, 96);
+			width = MulDiv(8 * str.GetLength() + 12, dpiY, 96);
 		}
 		m_bar.SetPaneInfo(IDS_STATUSBAR2, IDS_STATUSBAR2, SBPS_NORMAL, width);
 	}
@@ -5113,6 +5148,12 @@ void CmainDlg::OnClose()
 
 HBRUSH CmainDlg::OnCtlColor(CDC * pDC, CWnd * pWnd, UINT nCtlColor)
 {
+	if (accountSettings.darkMode && (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
+		static CBrush darkBrush(RGB(30, 34, 38));
+		pDC->SetTextColor(RGB(235, 238, 241));
+		pDC->SetBkColor(RGB(30, 34, 38));
+		return darkBrush;
+	}
 	HBRUSH br = CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);
 	return br;
 }
@@ -5202,19 +5243,27 @@ void CmainDlg::SnapMainWindowToWorkArea()
 		return;
 	}
 	CRect windowRect;
+	CRect visibleRect;
 	GetWindowRect(&windowRect);
+	if (FAILED(DwmGetWindowAttribute(m_hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visibleRect, sizeof(visibleRect)))) {
+		visibleRect = windowRect;
+	}
 	int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
-	if (windowRect.top == monitorInfo.rcWork.top && windowRect.Height() == workHeight) {
+	int topInset = visibleRect.top - windowRect.top;
+	int bottomInset = windowRect.bottom - visibleRect.bottom;
+	int targetTop = monitorInfo.rcWork.top - topInset;
+	int targetHeight = workHeight + topInset + bottomInset;
+	if (visibleRect.top == monitorInfo.rcWork.top && visibleRect.bottom == monitorInfo.rcWork.bottom) {
 		return;
 	}
 	m_snappingMainWindow = true;
-	SetWindowPos(NULL, windowRect.left, monitorInfo.rcWork.top, windowRect.Width(), workHeight,
+	SetWindowPos(NULL, windowRect.left, targetTop, windowRect.Width(), targetHeight,
 		SWP_NOACTIVATE | SWP_NOZORDER);
 	m_snappingMainWindow = false;
 	accountSettings.mainX = windowRect.left;
-	accountSettings.mainY = monitorInfo.rcWork.top;
+	accountSettings.mainY = targetTop;
 	accountSettings.mainW = windowRect.Width();
-	accountSettings.mainH = workHeight;
+	accountSettings.mainH = targetHeight;
 	AccountSettingsPendingSave();
 }
 
@@ -5768,6 +5817,7 @@ void CmainDlg::AccountSettingsPendingSave()
 void CmainDlg::OnAccountChanged(bool init)
 {
 	TrayIconUpdateTip();
+	SetPaneText2(get_account_server());
 	if (!init) {
 		pageDialer->RebuildButtons();
 	}

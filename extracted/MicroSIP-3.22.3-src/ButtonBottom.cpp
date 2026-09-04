@@ -39,6 +39,25 @@ CButtonBottom::~CButtonBottom()
 {
 }
 
+void CButtonBottom::SetDarkMode(bool enabled)
+{
+	if (enabled) {
+		m_clrButton = RGB(43, 48, 54);
+		m_clrButtonHover = RGB(59, 68, 77);
+		m_clrButtonPushed = RGB(45, 112, 166);
+		m_clrButtonText = RGB(235, 238, 241);
+		m_clrButtonTextPushed = RGB(255, 255, 255);
+	}
+	else {
+		m_clrButton = RGB(255, 255, 255);
+		m_clrButtonHover = RGB(224, 238, 249);
+		m_clrButtonPushed = RGB(92, 145, 219);
+		m_clrButtonText = RGB(0, 0, 0);
+		m_clrButtonTextPushed = RGB(255, 255, 255);
+	}
+	Invalidate();
+}
+
 BEGIN_MESSAGE_MAP(CButtonBottom, CMFCButton)
 	//{{AFX_MSG_MAP(CButtonBottom)
 	ON_WM_KILLFOCUS()

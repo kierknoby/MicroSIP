@@ -20,6 +20,7 @@
 #include "ButtonDialer.h"
 #include "Strsafe.h"
 #include "const.h"
+#include "global.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // CButtonDialer
@@ -115,13 +116,23 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	dc.Attach(lpDrawItemStruct->hDC);		//Get device context object
 	CRect rt;
 	rt = lpDrawItemStruct->rcItem;		//Get button rect
-	dc.FillSolidRect(rt, dc.GetBkColor());
+	if (accountSettings.darkMode) {
+		dc.FillSolidRect(rt, RGB(43, 48, 54));
+	}
+	else {
+		dc.FillSolidRect(rt, dc.GetBkColor());
+	}
 	dc.SetBkMode(TRANSPARENT);
 
 	CRect rtl = rt;
 	UINT state = lpDrawItemStruct->itemState;	//Get state of the button
 
-	if (!m_hTheme) {
+	if (accountSettings.darkMode) {
+		COLORREF background = (state & ODS_SELECTED) ? RGB(45, 112, 166) : RGB(43, 48, 54);
+		dc.FillSolidRect(rt, background);
+		dc.Draw3dRect(rt, RGB(71, 78, 86), RGB(24, 28, 32));
+	}
+	else if (!m_hTheme) {
 		UINT uStyle = DFCS_BUTTONPUSH;
 		if ((state & ODS_SELECTED)) {
 			uStyle |= DFCS_PUSHED;
@@ -159,7 +170,7 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 		// Do your text drawing
 		rtl.left += x12;
 		rtl.right -= x4;
-		crOldColor = dc.SetTextColor(RGB(127, 127, 127));
+		crOldColor = dc.SetTextColor(accountSettings.darkMode ? RGB(180, 188, 196) : RGB(127, 127, 127));
 		dc.DrawText(letters, rtl, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		dc.SetTextColor(crOldColor);
 		// Always select the old font back into the DC
@@ -167,10 +178,10 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	}
 	else {
 		if (forceNumeric) {
-			crOldColor = dc.SetTextColor(RGB(80, 80, 80));
+			crOldColor = dc.SetTextColor(accountSettings.darkMode ? RGB(235, 238, 241) : RGB(80, 80, 80));
 		}
 		else {
-			crOldColor = dc.SetTextColor(RGB(127, 127, 127));
+			crOldColor = dc.SetTextColor(accountSettings.darkMode ? RGB(210, 216, 222) : RGB(127, 127, 127));
 		}
 		dc.DrawText(strTemp, rt, DT_CENTER | DT_VCENTER | DT_SINGLELINE);		// Draw out the caption
 		dc.SetTextColor(crOldColor);
