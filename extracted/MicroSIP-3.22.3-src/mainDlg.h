@@ -162,6 +162,10 @@ public:
 	void AccountSettingsPendingSave();
 	void SnapMainWindowToWorkArea();
 	void ApplyDarkMode();
+	void LayoutCallTracePanel();
+	void CallTraceOnCallState(pjsua_call_info* call_info);
+	void CallTraceOnMediaState(pjsua_call_info* call_info);
+	void CallTraceOnIdentityChange(pjsua_call_id call_id);
 	void OnAccountChanged(bool init = false);
 	void OpenTransferDlg(CWnd *pParent, msip_action action, pjsua_call_id call_id = PJSUA_INVALID_ID, Contact *selectedContact = NULL);
 	void UpdateSoundDevicesIds();
@@ -189,6 +193,9 @@ protected:
 	StatusBar m_bar;
 	class CFreepbxFooter;
 	CFreepbxFooter* m_freepbxFooter;
+	class CCallTracePanel;
+	CCallTracePanel* m_callTracePanel;
+	pjsua_call_id m_callTraceCallId;
 	ULONG_PTR m_gdiplusToken;
 	CMMNotificationClient *mmNotificationClient;
 

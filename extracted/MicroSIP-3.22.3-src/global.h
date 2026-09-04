@@ -340,6 +340,9 @@ struct call_user_data
 	CString userAgent;
 	CString diversion;
 	CString callerID;
+	// Previous connected identity and the header it came from, kept for the call trace only.
+	CString callerIDPrev;
+	CString callerIDHeader;
 	CString commands;
 	CString reason;
 	bool inConference;

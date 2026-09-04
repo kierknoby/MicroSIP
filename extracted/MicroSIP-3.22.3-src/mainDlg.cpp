@@ -195,6 +195,209 @@ BEGIN_MESSAGE_MAP(CmainDlg::CFreepbxFooter, CWnd)
 	ON_WM_SETCURSOR()
 END_MESSAGE_MAP()
 
+// Scrolling technical event log for the current call session.
+class CmainDlg::CCallTracePanel : public CWnd
+{
+public:
+	CCallTracePanel() : lineCount(0) {}
+
+	bool CreatePanel(CWnd* parent)
+	{
+		if (!CreateEx(0, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL,
+			WS_CHILD, CRect(0, 0, 0, 0), parent, 0)) {
+			return false;
+		}
+		LOGFONT lf;
+		pj_bzero(&lf, sizeof(lf));
+		lf.lfHeight = -MulDiv(11, dpiY, 96);
+		lf.lfWeight = FW_NORMAL;
+		lf.lfCharSet = DEFAULT_CHARSET;
+		StringCchCopy(lf.lfFaceName, LF_FACESIZE, _T("Consolas"));
+		logFont.CreateFontIndirect(&lf);
+		lf.lfHeight = -MulDiv(12, dpiY, 96);
+		lf.lfWeight = FW_BOLD;
+		StringCchCopy(lf.lfFaceName, LF_FACESIZE, _T("Segoe UI"));
+		headingFont.CreateFontIndirect(&lf);
+
+		heading.Create(Translate(_T("Call Trace")), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+			CRect(0, 0, 0, 0), this);
+		heading.SetFont(&headingFont);
+		clear.Create(Translate(_T("Clear")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_CLEAR);
+		clear.SetFont(parent->GetFont());
+		log.Create(WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_READONLY
+			| ES_AUTOVSCROLL | ES_LEFT, CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_LOG);
+		log.SetFont(&logFont);
+		Reset();
+		return true;
+	}
+
+	void Reset()
+	{
+		lineCount = 0;
+		if (::IsWindow(log.m_hWnd)) {
+			log.SetWindowText(Translate(_T("No active call")));
+		}
+	}
+
+	void Clear()
+	{
+		lineCount = 0;
+		if (::IsWindow(log.m_hWnd)) {
+			log.SetWindowText(_T(""));
+		}
+	}
+
+	void Append(CString text)
+	{
+		if (!::IsWindow(log.m_hWnd)) {
+			return;
+		}
+		if (!lineCount) {
+			log.SetWindowText(_T(""));
+		}
+		bool follow = IsScrolledToBottom();
+		int firstVisible = log.GetFirstVisibleLine();
+
+		CTime now = CTime::GetCurrentTime();
+		CString line;
+		line.Format(_T("%s%s  %s"), lineCount ? _T("\r\n") : _T(""), now.Format(_T("%H:%M:%S")), text);
+
+		int length = log.GetWindowTextLength();
+		log.SetSel(length, length);
+		log.ReplaceSel(line);
+		lineCount++;
+		TrimHistory();
+
+		if (follow) {
+			log.LineScroll(log.GetLineCount());
+		}
+		else {
+			log.LineScroll(firstVisible - log.GetFirstVisibleLine());
+		}
+	}
+
+	void SetDarkMode(bool enabled)
+	{
+		darkMode = enabled;
+		SetWindowTheme(log.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(clear.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		clear.Invalidate();
+		log.Invalidate();
+		Invalidate();
+	}
+
+	void LayoutChildren()
+	{
+		if (!::IsWindow(m_hWnd)) {
+			return;
+		}
+		CRect client;
+		GetClientRect(&client);
+		int pad = MulDiv(4, dpiY, 96);
+		int headerHeight = MulDiv(18, dpiY, 96);
+		int clearWidth = MulDiv(52, dpiY, 96);
+		heading.SetWindowPos(NULL, pad, pad, client.Width() - clearWidth - pad * 3, headerHeight,
+			SWP_NOACTIVATE | SWP_NOZORDER);
+		clear.SetWindowPos(NULL, client.right - clearWidth - pad, pad, clearWidth, headerHeight,
+			SWP_NOACTIVATE | SWP_NOZORDER);
+		int logTop = pad * 2 + headerHeight;
+		log.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, max(0, client.bottom - logTop - pad),
+			SWP_NOACTIVATE | SWP_NOZORDER);
+	}
+
+protected:
+	afx_msg BOOL OnEraseBkgnd(CDC* dc)
+	{
+		CRect rect;
+		GetClientRect(&rect);
+		dc->FillSolidRect(rect, darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
+		return TRUE;
+	}
+	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd* child, UINT controlColor)
+	{
+		if (darkMode) {
+			static CBrush darkPanelBrush(RGB(30, 34, 38));
+			static CBrush darkEditBrush(RGB(43, 48, 54));
+			if (controlColor == CTLCOLOR_EDIT || controlColor == CTLCOLOR_LISTBOX) {
+				dc->SetTextColor(RGB(235, 238, 241));
+				dc->SetBkColor(RGB(43, 48, 54));
+				return darkEditBrush;
+			}
+			if (controlColor == CTLCOLOR_STATIC || controlColor == CTLCOLOR_DLG) {
+				dc->SetTextColor(RGB(235, 238, 241));
+				dc->SetBkColor(RGB(30, 34, 38));
+				return darkPanelBrush;
+			}
+		}
+		return CWnd::OnCtlColor(dc, child, controlColor);
+	}
+	afx_msg void OnSize(UINT type, int cx, int cy)
+	{
+		CWnd::OnSize(type, cx, cy);
+		LayoutChildren();
+	}
+	afx_msg void OnClear()
+	{
+		Clear();
+	}
+	DECLARE_MESSAGE_MAP()
+
+private:
+	bool IsScrolledToBottom()
+	{
+		CRect rect;
+		log.GetClientRect(&rect);
+		CDC* dc = log.GetDC();
+		if (!dc) {
+			return true;
+		}
+		CFont* oldFont = dc->SelectObject(&logFont);
+		TEXTMETRIC tm;
+		dc->GetTextMetrics(&tm);
+		dc->SelectObject(oldFont);
+		log.ReleaseDC(dc);
+		if (tm.tmHeight <= 0) {
+			return true;
+		}
+		int visibleLines = rect.Height() / tm.tmHeight;
+		return log.GetFirstVisibleLine() + visibleLines >= log.GetLineCount();
+	}
+
+	// Bounded textual history; oldest lines are dropped, no SIP messages are retained.
+	void TrimHistory()
+	{
+		const int maxLines = 1000;
+		if (lineCount <= maxLines) {
+			return;
+		}
+		int drop = lineCount - maxLines;
+		int charIndex = log.LineIndex(drop);
+		if (charIndex <= 0) {
+			return;
+		}
+		CString text;
+		log.GetWindowText(text);
+		log.SetWindowText(text.Mid(charIndex));
+		lineCount = maxLines;
+	}
+
+	CStatic heading;
+	CButton clear;
+	CEdit log;
+	CFont logFont;
+	CFont headingFont;
+	int lineCount;
+	bool darkMode = false;
+};
+
+BEGIN_MESSAGE_MAP(CmainDlg::CCallTracePanel, CWnd)
+	ON_WM_ERASEBKGND()
+	ON_WM_CTLCOLOR()
+	ON_WM_SIZE()
+	ON_BN_CLICKED(IDC_CALL_TRACE_CLEAR, OnClear)
+END_MESSAGE_MAP()
+
 CmainDlg* mainDlg;
 
 static UINT WM_SHELLHOOKMESSAGE;
@@ -439,6 +642,8 @@ LRESULT CmainDlg::onCallState(WPARAM wParam, LPARAM lParam)
 {
 	pjsua_call_info* call_info = (pjsua_call_info*)wParam;
 	call_user_data* user_data = (call_user_data*)lParam;
+
+	CallTraceOnCallState(call_info);
 
 	SIPURI sipuri;
     ParseCallSIPURI(call_info, user_data, &sipuri);
@@ -866,6 +1071,8 @@ LRESULT CmainDlg::onCallMediaState(WPARAM wParam, LPARAM lParam)
 {
 	pjsua_call_info* call_info = (pjsua_call_info*)wParam;
 	call_user_data* user_data = (call_user_data*)lParam;
+
+	CallTraceOnMediaState(call_info);
 
 	messagesDlg->UpdateHoldButton(call_info);
 
@@ -1624,9 +1831,11 @@ static void on_call_tsx_state(pjsua_call_id call_id, pjsip_transaction * tsx, pj
 				// --
 				pjsip_generic_string_hdr* hsr;
 				const pj_str_t headerCallerID = { "P-Asserted-Identity",19 };
+				CString headerName = _T("P-Asserted-Identity");
 				hsr = (pjsip_generic_string_hdr*)pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &headerCallerID, NULL);
 				if (!hsr) {
 					const pj_str_t headerCallerID = { "Remote-Party-Id",15 };
+					headerName = _T("Remote-Party-Id");
 					hsr = (pjsip_generic_string_hdr*)pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &headerCallerID, NULL);
 				}
 				if (hsr) {
@@ -1639,6 +1848,8 @@ static void on_call_tsx_state(pjsua_call_id call_id, pjsip_transaction * tsx, pj
 						oldCallerID = user_data->callerID;
 						if (oldCallerID.CompareNoCase(newCallerID) != 0) {
 							identityChanged = true;
+							user_data->callerIDPrev = oldCallerID;
+							user_data->callerIDHeader = headerName;
 							user_data->callerID = newCallerID;
 							// Invalidate cached name so the visible label is recomputed from updated signaling.
 							user_data->name.Empty();
@@ -1983,6 +2194,8 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	missed = false;
 	m_snappingMainWindow = false;
 	m_lockedWindowWidth = 0;
+	m_callTracePanel = NULL;
+	m_callTraceCallId = PJSUA_INVALID_ID;
 
 	usersDirectoryLoaded = false;
 	shortcutsURLLoaded = false;
@@ -2160,6 +2373,8 @@ BOOL CmainDlg::OnInitDialog()
 	m_freepbxFooter = new CFreepbxFooter();
 	m_freepbxFooter->CreateEx(0, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL, WS_CHILD | WS_VISIBLE, CRect(0, 0, 0, 0), this, 0);
 	m_freepbxFooter->LoadImageResource();
+	m_callTracePanel = new CCallTracePanel();
+	m_callTracePanel->CreatePanel(this);
 
 	AutoMove(m_bar.m_hWnd, 0, 100, 100, 0);
 	//--set window pos
@@ -2548,6 +2763,9 @@ void CmainDlg::ApplyDarkMode()
 	if (m_freepbxFooter) {
 		m_freepbxFooter->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	}
+	if (m_callTracePanel && ::IsWindow(m_callTracePanel->m_hWnd)) {
+		m_callTracePanel->SetDarkMode(accountSettings.darkMode);
+	}
 	m_ButtonMenu.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	m_bar.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
@@ -2558,6 +2776,116 @@ void CmainDlg::OnMenuDarkMode()
 	accountSettings.darkMode = !accountSettings.darkMode;
 	AccountSettingsPendingSave();
 	ApplyDarkMode();
+}
+
+// All trace emitters run on the UI thread from already-marshalled call data.
+void CmainDlg::CallTraceOnCallState(pjsua_call_info* call_info)
+{
+	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !call_info) {
+		return;
+	}
+	CString line;
+	if (m_callTraceCallId != call_info->id) {
+		m_callTraceCallId = call_info->id;
+		m_callTracePanel->Clear();
+		m_callTracePanel->Append(call_info->role == PJSIP_ROLE_UAS
+			? _T("Incoming call created") : _T("Outgoing call created"));
+		line.Format(_T("Call ID: %d"), call_info->id);
+		m_callTracePanel->Append(line);
+		line.Format(_T("Account: %d %s"), call_info->acc_id, accountSettings.account.username);
+		m_callTracePanel->Append(line);
+		line.Format(_T("Server: %s"), get_account_server());
+		m_callTracePanel->Append(line);
+		line.Format(_T("SIP Call-ID: %s"), CString(call_info->call_id.ptr, call_info->call_id.slen));
+		m_callTracePanel->Append(line);
+		line.Format(_T("Local URI: %s"), CString(call_info->local_info.ptr, call_info->local_info.slen));
+		m_callTracePanel->Append(line);
+		line.Format(_T("Remote URI: %s"), CString(call_info->remote_info.ptr, call_info->remote_info.slen));
+		m_callTracePanel->Append(line);
+		if (call_info->remote_contact.slen) {
+			line.Format(_T("Remote contact: %s"), CString(call_info->remote_contact.ptr, call_info->remote_contact.slen));
+			m_callTracePanel->Append(line);
+		}
+	}
+	line.Format(_T("State: %s"), CString(call_info->state_text.ptr, call_info->state_text.slen));
+	m_callTracePanel->Append(line);
+	if (call_info->state == PJSIP_INV_STATE_DISCONNECTED) {
+		line.Format(_T("SIP status: %d / %s"), call_info->last_status,
+			CString(call_info->last_status_text.ptr, call_info->last_status_text.slen));
+		m_callTracePanel->Append(line);
+	}
+}
+
+void CmainDlg::CallTraceOnMediaState(pjsua_call_info* call_info)
+{
+	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !call_info) {
+		return;
+	}
+	CString line;
+	switch (call_info->media_status) {
+	case PJSUA_CALL_MEDIA_ACTIVE:
+		m_callTracePanel->Append(_T("Media: active"));
+		break;
+	case PJSUA_CALL_MEDIA_LOCAL_HOLD:
+		m_callTracePanel->Append(_T("Media: local hold"));
+		break;
+	case PJSUA_CALL_MEDIA_REMOTE_HOLD:
+		m_callTracePanel->Append(_T("Media: remote hold"));
+		break;
+	case PJSUA_CALL_MEDIA_ERROR:
+		m_callTracePanel->Append(_T("Media: error"));
+		break;
+	default:
+		m_callTracePanel->Append(_T("Media: none"));
+		break;
+	}
+	if (call_info->media_status != PJSUA_CALL_MEDIA_ACTIVE) {
+		return;
+	}
+	pjsua_stream_info stream_info;
+	if (pjsua_call_get_stream_info(call_info->id, 0, &stream_info) == PJ_SUCCESS
+		&& stream_info.type == PJMEDIA_TYPE_AUDIO) {
+		line.Format(_T("Audio: %s/%d/%d"),
+			CString(stream_info.info.aud.fmt.encoding_name.ptr, stream_info.info.aud.fmt.encoding_name.slen),
+			stream_info.info.aud.fmt.clock_rate, stream_info.info.aud.fmt.channel_cnt);
+		m_callTracePanel->Append(line);
+		char addr[PJ_INET6_ADDRSTRLEN + 10];
+		if (pj_sockaddr_print(&stream_info.info.aud.rem_addr, addr, sizeof(addr), 3)) {
+			line.Format(_T("Remote RTP: %s"), CString(addr));
+			m_callTracePanel->Append(line);
+		}
+	}
+	pjsua_stream_stat stat;
+	if (pjsua_call_get_stream_stat(call_info->id, 0, &stat) == PJ_SUCCESS) {
+		line.Format(_T("RTP rx=%u tx=%u loss_rx=%u jitter_rx=%.1f ms rtt=%.1f ms"),
+			(unsigned)stat.rtcp.rx.pkt, (unsigned)stat.rtcp.tx.pkt, (unsigned)stat.rtcp.rx.loss,
+			stat.rtcp.rx.jitter.last / 1000.0f, stat.rtcp.rtt.last / 1000.0f);
+		m_callTracePanel->Append(line);
+	}
+}
+
+void CmainDlg::CallTraceOnIdentityChange(pjsua_call_id call_id)
+{
+	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || call_id != m_callTraceCallId) {
+		return;
+	}
+	call_user_data* user_data = (call_user_data*)pjsua_call_get_user_data(call_id);
+	if (!user_data) {
+		return;
+	}
+	user_data->CS.Lock();
+	CString header = user_data->callerIDHeader;
+	CString previous = user_data->callerIDPrev;
+	CString current = user_data->callerID;
+	user_data->CS.Unlock();
+	CString line;
+	if (!header.IsEmpty() && !current.IsEmpty()) {
+		line.Format(_T("%s received: %s"), header, current);
+		m_callTracePanel->Append(line);
+	}
+	line.Format(_T("Connected identity changed: %s -> %s"),
+		previous.IsEmpty() ? _T("-") : previous, current.IsEmpty() ? _T("-") : current);
+	m_callTracePanel->Append(line);
 }
 
 void CmainDlg::OnMenuLog()
@@ -3965,6 +4293,7 @@ void CmainDlg::OnTcnSelchangeTab(NMHDR * pNMHDR, LRESULT * pResult)
 	}
 	else {
 	}
+	LayoutCallTracePanel();
 	*pResult = 0;
 }
 
@@ -4987,6 +5316,9 @@ LRESULT CmainDlg::onCallHangup(WPARAM wParam, LPARAM lParam)
 
 LRESULT CmainDlg::onTabIconUpdate(WPARAM wParam, LPARAM lParam)
 {
+	if (lParam) {
+		CallTraceOnIdentityChange((pjsua_call_id)wParam);
+	}
 	if (messagesDlg) {
 		pjsua_call_id call_id = wParam;
 		for (int i = 0; i < messagesDlg->tab->GetItemCount(); i++) {
@@ -5308,6 +5640,39 @@ void CmainDlg::LayoutFreepbxFooter()
 	int footerHeight = MulDiv(76, dpiY, 96);
 	int top = max(0, status.top - footerHeight);
 	m_freepbxFooter->SetWindowPos(NULL, 0, top, client.Width(), status.top - top, SWP_NOACTIVATE | SWP_NOZORDER);
+	LayoutCallTracePanel();
+}
+
+// Uses only the blank region between the dialler page and the footer; no existing control is moved.
+void CmainDlg::LayoutCallTracePanel()
+{
+	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !m_freepbxFooter
+		|| !::IsWindow(m_freepbxFooter->m_hWnd) || !pageDialer || !::IsWindow(pageDialer->m_hWnd)) {
+		return;
+	}
+	if (!pageDialer->IsWindowVisible()) {
+		m_callTracePanel->ShowWindow(SW_HIDE);
+		return;
+	}
+	CRect client;
+	CRect page;
+	CRect footer;
+	GetClientRect(&client);
+	pageDialer->GetWindowRect(&page);
+	ScreenToClient(&page);
+	m_freepbxFooter->GetWindowRect(&footer);
+	ScreenToClient(&footer);
+	int gap = MulDiv(6, dpiY, 96);
+	int top = page.bottom + gap;
+	int height = footer.top - gap - top;
+	if (height < MulDiv(60, dpiY, 96)) {
+		m_callTracePanel->ShowWindow(SW_HIDE);
+		return;
+	}
+	m_callTracePanel->SetWindowPos(NULL, page.left, top, page.Width(), height,
+		SWP_NOACTIVATE | SWP_NOZORDER);
+	m_callTracePanel->ShowWindow(SW_SHOW);
+	m_callTracePanel->LayoutChildren();
 }
 
 void CmainDlg::SetupJumpList()
