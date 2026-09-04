@@ -217,8 +217,11 @@ void CClosableTabCtrl::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 	CDC* pDC = CDC::FromHandle(lpDIS->hDC);
 	if (!pDC)
 		return;
+
+	CRect rcFullItem(lpDIS->rcItem);
+	bool bSelected = (lpDIS->itemState & ODS_SELECTED) != 0;
 	if (accountSettings.darkMode) {
-		pDC->FillSolidRect(rect, bSelected ? RGB(59, 68, 77) : RGB(43, 48, 54));
+		pDC->FillSolidRect(&rect, bSelected ? RGB(59, 68, 77) : RGB(43, 48, 54));
 		pDC->Draw3dRect(rect, RGB(71, 78, 86), RGB(30, 34, 38));
 		int oldBkMode = pDC->SetBkMode(TRANSPARENT);
 		COLORREF oldColor = pDC->SetTextColor((tci.dwState & TCIS_HIGHLIGHTED) ? RGB(255, 170, 170) : RGB(235, 238, 241));
@@ -227,9 +230,6 @@ void CClosableTabCtrl::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 		pDC->SetBkMode(oldBkMode);
 		return;
 	}
-
-	CRect rcFullItem(lpDIS->rcItem);
-	bool bSelected = (lpDIS->itemState & ODS_SELECTED) != 0;
 
 	///////////////////////////////////////////////////////////////////////////////////////
 	// Adding support for XP Styles (Vista Themes) for owner drawn tab controls simply
