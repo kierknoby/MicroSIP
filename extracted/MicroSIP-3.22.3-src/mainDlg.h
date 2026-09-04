@@ -95,6 +95,9 @@ public:
 	bool missed;
 	bool m_snappingMainWindow;
 	int m_lockedWindowWidth;
+	bool m_appBarRegistered;
+	UINT m_appBarEdge;
+	bool m_appBarPositioning;
 
 	CString callIdIncomingIgnore;
 	CList<int,int> toneCalls;
@@ -162,6 +165,9 @@ public:
 	void AccountSettingsPendingSave();
 	void SnapMainWindowToWorkArea();
 	void ApplyDarkMode();
+	void AppBarUpdateDock(bool allowDockChange);
+	void AppBarRemove();
+	void AppBarApplyPosition();
 	void LayoutCallTracePanel();
 	void CallTraceOnCallState(pjsua_call_info* call_info);
 	void CallTraceOnMediaState(pjsua_call_info* call_info);
@@ -248,6 +254,7 @@ public:
 	afx_msg void OnSize(UINT type, int w, int h);
 	afx_msg void OnExitSizeMove();
 	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
+	afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);
 	afx_msg void OnMenuDarkMode();
 	afx_msg LRESULT onShellHookMessage(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallAnswer(WPARAM wParam,LPARAM lParam);

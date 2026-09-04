@@ -37,6 +37,8 @@ public:
 
 	CListCtrl_SortItemsEx m_SortItemsExListCtrl;
 
+	void SetDarkMode(bool enabled);
+
 	AddDlg* addDlg;
 
 	CList<Contact*> contacts;
@@ -82,6 +84,7 @@ protected:
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	DECLARE_MESSAGE_MAP()
 public:
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnTimer(UINT_PTR TimerVal);
 	afx_msg void OnBnClickedOk();
 	afx_msg void OnBnClickedCancel();

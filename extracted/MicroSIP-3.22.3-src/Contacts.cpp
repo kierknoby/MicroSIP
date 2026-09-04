@@ -28,6 +28,7 @@
 #include "Transfer.h"
 #include "afxinet.h"
 #include "MessageBoxX.h"
+#include <uxtheme.h>
 
 static UINT_PTR blinkTimer = NULL;
 static bool blinkState = false;
@@ -81,6 +82,36 @@ void Contacts::OnCreated()
 	m_SortItemsExListCtrl.SetSortColumn(0, true);
 }
 
+HBRUSH Contacts::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+	if (accountSettings.darkMode
+		&& (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
+		static CBrush darkDialogBrush(RGB(30, 34, 38));
+		static CBrush darkEditBrush(RGB(43, 48, 54));
+		pDC->SetTextColor(RGB(235, 238, 241));
+		if (nCtlColor == CTLCOLOR_EDIT) {
+			pDC->SetBkColor(RGB(43, 48, 54));
+			return darkEditBrush;
+		}
+		pDC->SetBkColor(RGB(30, 34, 38));
+		return darkDialogBrush;
+	}
+	return CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);
+}
+
+void Contacts::SetDarkMode(bool enabled)
+{
+	if (!::IsWindow(m_hWnd)) {
+		return;
+	}
+	m_SortItemsExListCtrl.SetDarkMode(enabled);
+	CWnd* edit = GetDlgItem(IDC_FILER_VALUE);
+	if (edit) {
+		SetWindowTheme(edit->m_hWnd, enabled ? L"DarkMode_CFD" : NULL, NULL);
+	}
+	RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+}
+
 void Contacts::PostNcDestroy()
 {
 	CBaseDialog::PostNcDestroy();
@@ -100,6 +131,7 @@ BEGIN_MESSAGE_MAP(Contacts, CBaseDialog)
 	ON_BN_CLICKED(IDOK, OnBnClickedOk)
 	ON_BN_CLICKED(IDCANCEL, OnBnClickedCancel)
 	ON_EN_CHANGE(IDC_FILER_VALUE, OnFilterValueChange)
+	ON_WM_CTLCOLOR()
 	ON_COMMAND(ID_CALL_PICKUP, OnMenuCallPickup)
 	ON_COMMAND(ID_CALL, OnMenuCall)
 	ON_COMMAND(ID_CALL_PHONE, OnMenuCallPhone)

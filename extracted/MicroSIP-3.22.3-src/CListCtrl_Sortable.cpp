@@ -5,6 +5,13 @@
 #include "mainDlg.h"
 
 #include <shlwapi.h>
+#include <uxtheme.h>
+#pragma comment(lib, "uxtheme.lib")
+
+static void EnableWindowThemeDark(HWND hwnd, bool enabled)
+{
+	::SetWindowTheme(hwnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+}
 
 #ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
 #define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
@@ -13,6 +20,74 @@
 BEGIN_MESSAGE_MAP(CListCtrl_Sortable, CListCtrl_LabelTip)
 	ON_NOTIFY_REFLECT_EX(LVN_COLUMNCLICK, OnHeaderClick)	// Column Click
 END_MESSAGE_MAP()
+
+BEGIN_MESSAGE_MAP(CDarkHeaderCtrl, CHeaderCtrl)
+	ON_NOTIFY_REFLECT(NM_CUSTOMDRAW, OnCustomDraw)
+END_MESSAGE_MAP()
+
+void CDarkHeaderCtrl::OnCustomDraw(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NMCUSTOMDRAW* draw = (NMCUSTOMDRAW*)pNMHDR;
+	if (!m_darkMode) {
+		*pResult = CDRF_DODEFAULT;
+		return;
+	}
+	if (draw->dwDrawStage == CDDS_PREPAINT) {
+		*pResult = CDRF_NOTIFYITEMDRAW;
+		return;
+	}
+	if (draw->dwDrawStage != CDDS_ITEMPREPAINT) {
+		*pResult = CDRF_DODEFAULT;
+		return;
+	}
+	CDC* dc = CDC::FromHandle(draw->hdc);
+	if (!dc) {
+		*pResult = CDRF_DODEFAULT;
+		return;
+	}
+	CRect rect = draw->rc;
+	dc->FillSolidRect(&rect, (draw->uItemState & CDIS_SELECTED) ? RGB(59, 68, 77) : RGB(43, 48, 54));
+	dc->FillSolidRect(rect.right - 1, rect.top, 1, rect.Height(), RGB(71, 78, 86));
+	dc->FillSolidRect(rect.left, rect.bottom - 1, rect.Width(), 1, RGB(71, 78, 86));
+	TCHAR text[256] = { 0 };
+	HDITEM item = { 0 };
+	item.mask = HDI_TEXT | HDI_FORMAT;
+	item.pszText = text;
+	item.cchTextMax = _countof(text);
+	if (GetItem((int)draw->dwItemSpec, &item)) {
+		int oldMode = dc->SetBkMode(TRANSPARENT);
+		COLORREF oldColor = dc->SetTextColor(RGB(235, 238, 241));
+		CFont* oldFont = dc->SelectObject(GetFont());
+		rect.DeflateRect(4, 0);
+		UINT format = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
+		format |= (item.fmt & HDF_CENTER) ? DT_CENTER : ((item.fmt & HDF_RIGHT) ? DT_RIGHT : DT_LEFT);
+		dc->DrawText(text, rect, format);
+		dc->SelectObject(oldFont);
+		dc->SetTextColor(oldColor);
+		dc->SetBkMode(oldMode);
+	}
+	*pResult = CDRF_SKIPDEFAULT;
+}
+
+void CListCtrl_Sortable::SetDarkMode(bool enabled)
+{
+	if (!::IsWindow(m_hWnd)) {
+		return;
+	}
+	SetBkColor(enabled ? RGB(30, 34, 38) : GetSysColor(COLOR_WINDOW));
+	SetTextBkColor(enabled ? RGB(30, 34, 38) : GetSysColor(COLOR_WINDOW));
+	SetTextColor(enabled ? RGB(235, 238, 241) : GetSysColor(COLOR_WINDOWTEXT));
+	EnableWindowThemeDark(m_hWnd, enabled);
+	CHeaderCtrl* header = GetHeaderCtrl();
+	if (header && ::IsWindow(header->m_hWnd)) {
+		if (!::IsWindow(m_DarkHeader.m_hWnd)) {
+			m_DarkHeader.SubclassWindow(header->m_hWnd);
+		}
+		m_DarkHeader.m_darkMode = enabled;
+		m_DarkHeader.Invalidate();
+	}
+	Invalidate();
+}
 
 namespace {
 	bool IsThemeEnabled()

@@ -402,6 +402,7 @@ CmainDlg* mainDlg;
 
 static UINT WM_SHELLHOOKMESSAGE;
 static UINT WM_TASKBARRESTARTMESSAGE;
+#define WM_APPBAR_CALLBACK (WM_USER + 0x50)
 
 static bool updateCheckerShow;
 
@@ -2031,6 +2032,7 @@ CmainDlg::~CmainDlg(void)
 
 void CmainDlg::OnDestroy()
 {
+	AppBarRemove();
 	if (mmNotificationClient) {
 		delete mmNotificationClient;
 	}
@@ -2071,6 +2073,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_WM_SIZE()
 	ON_WM_EXITSIZEMOVE()
 	ON_WM_GETMINMAXINFO()
+	ON_WM_WINDOWPOSCHANGING()
 	ON_WM_CLOSE()
 	ON_WM_CTLCOLOR()
 	ON_WM_CONTEXTMENU()
@@ -2133,6 +2136,12 @@ LRESULT CmainDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 	if (message == WM_TASKBARRESTARTMESSAGE) {
 		ShowTrayIcon();
 	}
+	if (message == WM_APPBAR_CALLBACK) {
+		if (wParam == ABN_POSCHANGED || wParam == ABN_FULLSCREENAPP) {
+			AppBarApplyPosition();
+		}
+		return 0;
+	}
 	return CBaseDialog::WindowProc(message, wParam, lParam);
 }
 
@@ -2194,6 +2203,9 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	missed = false;
 	m_snappingMainWindow = false;
 	m_lockedWindowWidth = 0;
+	m_appBarRegistered = false;
+	m_appBarEdge = ABE_LEFT;
+	m_appBarPositioning = false;
 	m_callTracePanel = NULL;
 	m_callTraceCallId = PJSUA_INVALID_ID;
 
@@ -2759,6 +2771,15 @@ void CmainDlg::ApplyDarkMode()
 	statusctrl.SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
 	if (pageDialer) {
 		pageDialer->SetDarkMode(accountSettings.darkMode);
+	}
+	if (pageCalls) {
+		pageCalls->SetDarkMode(accountSettings.darkMode);
+	}
+	if (pageContacts) {
+		pageContacts->SetDarkMode(accountSettings.darkMode);
+	}
+	if (imageListStatus) {
+		imageListStatus->SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : RGB(255, 255, 255));
 	}
 	if (m_freepbxFooter) {
 		m_freepbxFooter->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
@@ -5566,13 +5587,35 @@ void CmainDlg::OnSize(UINT type, int w, int h)
 
 void CmainDlg::OnExitSizeMove()
 {
-	SnapMainWindowToWorkArea();
+	AppBarUpdateDock(true);
+	if (!m_appBarRegistered) {
+		SnapMainWindowToWorkArea();
+	}
+}
+
+// Windows may still propose an Aero Snap size while WS_THICKFRAME is present.
+void CmainDlg::OnWindowPosChanging(WINDOWPOS* lpwndpos)
+{
+	CBaseDialog::OnWindowPosChanging(lpwndpos);
+	if (m_lockedWindowWidth && !(lpwndpos->flags & SWP_NOSIZE)) {
+		lpwndpos->cx = m_lockedWindowWidth;
+	}
 }
 
 void CmainDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
 {
 	CBaseDialog::OnGetMinMaxInfo(lpMMI);
 	if (!m_lockedWindowWidth) {
+		return;
+	}
+	lpMMI->ptMinTrackSize.x = m_lockedWindowWidth;
+	lpMMI->ptMaxTrackSize.x = m_lockedWindowWidth;
+	if (m_appBarRegistered) {
+		// While docked our own reservation is inside rcWork, so hold the current height instead.
+		CRect current;
+		GetWindowRect(&current);
+		lpMMI->ptMinTrackSize.y = current.Height();
+		lpMMI->ptMaxTrackSize.y = current.Height();
 		return;
 	}
 	MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
@@ -5587,10 +5630,117 @@ void CmainDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
 	}
 	int targetHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top
 		+ (visibleRect.top - windowRect.top) + (windowRect.bottom - visibleRect.bottom);
-	lpMMI->ptMinTrackSize.x = m_lockedWindowWidth;
-	lpMMI->ptMaxTrackSize.x = m_lockedWindowWidth;
 	lpMMI->ptMinTrackSize.y = targetHeight;
 	lpMMI->ptMaxTrackSize.y = targetHeight;
+}
+
+// Docks to a monitor edge and reserves exactly the fixed softphone width via the Windows AppBar API.
+void CmainDlg::AppBarUpdateDock(bool allowDockChange)
+{
+	if (!::IsWindow(m_hWnd) || !m_lockedWindowWidth || m_appBarPositioning) {
+		return;
+	}
+	MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+	if (!GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+		return;
+	}
+	if (allowDockChange) {
+		CRect windowRect;
+		CRect visibleRect;
+		GetWindowRect(&windowRect);
+		if (FAILED(DwmGetWindowAttribute(m_hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visibleRect, sizeof(visibleRect)))) {
+			visibleRect = windowRect;
+		}
+		int threshold = MulDiv(18, dpiY, 96);
+		bool dockLeft = abs(visibleRect.left - monitorInfo.rcMonitor.left) <= threshold;
+		bool dockRight = abs(monitorInfo.rcMonitor.right - visibleRect.right) <= threshold;
+		if (!dockLeft && !dockRight) {
+			AppBarRemove();
+			return;
+		}
+		m_appBarEdge = dockLeft ? ABE_LEFT : ABE_RIGHT;
+	}
+	else if (!m_appBarRegistered) {
+		return;
+	}
+
+	APPBARDATA data = { sizeof(APPBARDATA) };
+	data.hWnd = m_hWnd;
+	if (!m_appBarRegistered) {
+		data.uCallbackMessage = WM_APPBAR_CALLBACK;
+		if (!SHAppBarMessage(ABM_NEW, &data)) {
+			return;
+		}
+		m_appBarRegistered = true;
+	}
+	AppBarApplyPosition();
+}
+
+void CmainDlg::AppBarApplyPosition()
+{
+	if (!m_appBarRegistered || m_appBarPositioning || !m_lockedWindowWidth) {
+		return;
+	}
+	MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+	if (!GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+		return;
+	}
+	CRect windowRect;
+	CRect visibleRect;
+	GetWindowRect(&windowRect);
+	if (FAILED(DwmGetWindowAttribute(m_hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visibleRect, sizeof(visibleRect)))) {
+		visibleRect = windowRect;
+	}
+	int leftInset = visibleRect.left - windowRect.left;
+	int rightInset = windowRect.right - visibleRect.right;
+	int topInset = visibleRect.top - windowRect.top;
+	int bottomInset = windowRect.bottom - visibleRect.bottom;
+	int visibleWidth = m_lockedWindowWidth - leftInset - rightInset;
+
+	// Reserve using full monitor bounds so our own reservation is never fed back in.
+	APPBARDATA data = { sizeof(APPBARDATA) };
+	data.hWnd = m_hWnd;
+	data.uEdge = m_appBarEdge;
+	data.rc = monitorInfo.rcMonitor;
+	if (m_appBarEdge == ABE_LEFT) {
+		data.rc.right = data.rc.left + visibleWidth;
+	}
+	else {
+		data.rc.left = data.rc.right - visibleWidth;
+	}
+	SHAppBarMessage(ABM_QUERYPOS, &data);
+	if (m_appBarEdge == ABE_LEFT) {
+		data.rc.right = data.rc.left + visibleWidth;
+	}
+	else {
+		data.rc.left = data.rc.right - visibleWidth;
+	}
+	SHAppBarMessage(ABM_SETPOS, &data);
+
+	m_appBarPositioning = true;
+	SetWindowPos(NULL, data.rc.left - leftInset, data.rc.top - topInset,
+		m_lockedWindowWidth, (data.rc.bottom - data.rc.top) + topInset + bottomInset,
+		SWP_NOACTIVATE | SWP_NOZORDER);
+	m_appBarPositioning = false;
+
+	APPBARDATA changed = { sizeof(APPBARDATA) };
+	changed.hWnd = m_hWnd;
+	SHAppBarMessage(ABM_WINDOWPOSCHANGED, &changed);
+
+	accountSettings.mainX = data.rc.left - leftInset;
+	accountSettings.mainY = data.rc.top - topInset;
+	AccountSettingsPendingSave();
+}
+
+void CmainDlg::AppBarRemove()
+{
+	if (!m_appBarRegistered) {
+		return;
+	}
+	APPBARDATA data = { sizeof(APPBARDATA) };
+	data.hWnd = m_hWnd;
+	SHAppBarMessage(ABM_REMOVE, &data);
+	m_appBarRegistered = false;
 }
 
 void CmainDlg::SnapMainWindowToWorkArea()

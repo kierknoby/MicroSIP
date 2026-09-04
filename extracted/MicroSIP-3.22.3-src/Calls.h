@@ -38,6 +38,8 @@ public:
 
 	CListCtrl_SortItemsEx m_SortItemsExListCtrl;
 
+	void SetDarkMode(bool enabled);
+
 	int Get(CString id);
 	void Add(pj_str_t id, CString number, CString name, int type, call_user_data *user_data);
 	void SetName(pj_str_t id, CString name);
@@ -76,6 +78,7 @@ protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
 	DECLARE_MESSAGE_MAP()
 public:
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnBnClickedOk();
 	afx_msg void OnBnClickedCancel();
 	afx_msg void OnFilterValueChange();

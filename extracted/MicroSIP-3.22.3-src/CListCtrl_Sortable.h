@@ -2,10 +2,21 @@
 
 #include "CListCtrl_LabelTip.h"
 
+// Header subclass used only to provide a dark-mode custom draw path.
+class CDarkHeaderCtrl : public CHeaderCtrl
+{
+	DECLARE_MESSAGE_MAP();
+
+public:
+	bool m_darkMode = false;
+	afx_msg void OnCustomDraw(NMHDR* pNMHDR, LRESULT* pResult);
+};
+
 class CListCtrl_Sortable : public CListCtrl_LabelTip
 {
 	bool m_Ascending;
 	int  m_SortCol;
+	CDarkHeaderCtrl m_DarkHeader;
 
 	DECLARE_MESSAGE_MAP();
 
@@ -24,4 +35,5 @@ public:
 	void ResetSortOrder();
 	virtual bool SortColumn(int columnIndex, bool ascending) = 0;
 	void SetSortColumn(int columnIndex, bool ascending);
+	void SetDarkMode(bool enabled);
 };

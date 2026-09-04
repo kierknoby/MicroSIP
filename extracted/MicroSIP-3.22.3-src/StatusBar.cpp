@@ -19,6 +19,7 @@
 #include "StdAfx.h"   
 #include "StatusBar.h"   
 #include "global.h"
+#include "settings.h"
 
  // StatusBar   
 IMPLEMENT_DYNAMIC(StatusBar, CStatusBar)
@@ -36,8 +37,49 @@ BEGIN_MESSAGE_MAP(StatusBar, CStatusBar)
 	ON_MESSAGE(WM_IDLEUPDATECMDUI, OnIdleUpdateCmdUI)
 	ON_WM_LBUTTONUP()
 	ON_WM_MOUSEMOVE()
+	ON_WM_PAINT()
 	//}}AFX_MSG_MAP   
 END_MESSAGE_MAP()
+
+// Dark mode only; the light path stays on the default status bar rendering.
+void StatusBar::OnPaint()
+{
+	if (!accountSettings.darkMode) {
+		Default();
+		return;
+	}
+	CPaintDC dc(this);
+	CRect client;
+	GetClientRect(&client);
+	dc.FillSolidRect(client, RGB(30, 34, 38));
+	dc.FillSolidRect(client.left, client.top, client.Width(), 1, RGB(71, 78, 86));
+	int oldMode = dc.SetBkMode(TRANSPARENT);
+	COLORREF oldColor = dc.SetTextColor(RGB(235, 238, 241));
+	CFont* oldFont = dc.SelectObject(GetFont());
+	CStatusBarCtrl& control = GetStatusBarCtrl();
+	for (int i = 0; i < m_nCount; i++) {
+		CRect rect;
+		GetItemRect(i, &rect);
+		if (rect.IsRectEmpty()) {
+			continue;
+		}
+		rect.DeflateRect(2, 0);
+		HICON icon = control.GetIcon(i);
+		if (icon) {
+			int size = GetSystemMetrics(SM_CXSMICON);
+			int iconTop = rect.top + max(0, (rect.Height() - size) / 2);
+			::DrawIconEx(dc.m_hDC, rect.left, iconTop, icon, size, size, 0, NULL, DI_NORMAL);
+			rect.left += size + 2;
+		}
+		CString text = GetPaneText(i);
+		if (!text.IsEmpty()) {
+			dc.DrawText(text, rect, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
+		}
+	}
+	dc.SelectObject(oldFont);
+	dc.SetTextColor(oldColor);
+	dc.SetBkMode(oldMode);
+}
 
 LRESULT StatusBar::OnIdleUpdateCmdUI(WPARAM wParam, LPARAM lParam)
 {
