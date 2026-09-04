@@ -1,0 +1,136 @@
+name: Build MicroSIP for Windows
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-win32-release:
+    name: MicroSIP Win32 Release
+    runs-on: windows-2022
+    env:
+      MICROSIP_SOURCE_DIR: extracted\MicroSIP-3.22.3-src
+      PJPROJECT_REF: 6cab30cec44af36ba7c8a45ff7af2f74a8ed288c
+      OPUS_REF: ddbe48383984d56acd9e1ab6a090c54ca6b735a6
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Verify MicroSIP source inputs
+        shell: pwsh
+        run: |
+          $project = Join-Path $env:GITHUB_WORKSPACE "$env:MICROSIP_SOURCE_DIR\microsip.vcxproj"
+          $packages = Join-Path $env:GITHUB_WORKSPACE "$env:MICROSIP_SOURCE_DIR\packages.config"
+          if (!(Test-Path $project)) { throw "MicroSIP project not found: $project" }
+          if (!(Test-Path $packages)) { throw "NuGet packages.config not found: $packages" }
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: |
+          nuget restore "$env:GITHUB_WORKSPACE\$env:MICROSIP_SOURCE_DIR\packages.config" `
+            -PackagesDirectory "$env:RUNNER_TEMP\microsip-packages" `
+            -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "NuGet restore failed with exit code $LASTEXITCODE" }
+
+      - name: Prepare pinned native dependencies
+        shell: pwsh
+        run: |
+          $buildRoot = Join-Path $env:RUNNER_TEMP 'microsip-build'
+          $pjprojectRoot = Join-Path $env:RUNNER_TEMP 'pjproject'
+          $opusRoot = Join-Path $env:RUNNER_TEMP 'opus'
+          Remove-Item $buildRoot, $pjprojectRoot, $opusRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $buildRoot | Out-Null
+
+          git clone https://github.com/pjsip/pjproject.git $pjprojectRoot
+          git -C $pjprojectRoot checkout $env:PJPROJECT_REF
+          git clone https://github.com/xiph/opus.git $opusRoot
+          git -C $opusRoot checkout $env:OPUS_REF
+
+          Get-ChildItem $pjprojectRoot -Force |
+            Where-Object { $_.Name -ne '.git' } |
+            Copy-Item -Destination $buildRoot -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\$env:MICROSIP_SOURCE_DIR" -Destination $buildRoot -Recurse
+
+          $projectDir = Join-Path $buildRoot 'MicroSIP-3.22.3-src'
+          if (!(Test-Path "$projectDir\microsip.vcxproj")) {
+            throw "Prepared MicroSIP project not found: $projectDir\microsip.vcxproj"
+          }
+
+      - name: Build static Opus library
+        shell: pwsh
+        run: |
+          $buildRoot = Join-Path $env:RUNNER_TEMP 'microsip-build'
+          $opusRoot = Join-Path $env:RUNNER_TEMP 'opus'
+          $opusBuildDir = Join-Path $buildRoot 'opus-build'
+          cmake -S $opusRoot -B $opusBuildDir -A Win32 `
+            -DBUILD_SHARED_LIBS=OFF -DOPUS_BUILD_PROGRAMS=OFF `
+            -DOPUS_BUILD_TESTING=OFF -DOPUS_INSTALL_PKG_CONFIG_MODULE=OFF
+          if ($LASTEXITCODE -ne 0) { throw "Opus configuration failed with exit code $LASTEXITCODE" }
+          cmake --build $opusBuildDir --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Opus build failed with exit code $LASTEXITCODE" }
+
+          $opusLibrary = Get-ChildItem $opusBuildDir -Filter opus.lib -Recurse | Select-Object -First 1
+          if (!$opusLibrary) { throw "Opus build did not produce opus.lib" }
+          $opusLibraryDir = Join-Path $buildRoot 'third_party\opus\Win32'
+          $opusIncludeDir = Join-Path $buildRoot 'third_party\opus\include'
+          New-Item -ItemType Directory -Path $opusLibraryDir -Force | Out-Null
+          Copy-Item $opusLibrary.FullName "$opusLibraryDir\opus.lib"
+          Copy-Item $opusLibrary.FullName "$opusLibraryDir\libopus.a"
+          Copy-Item "$opusRoot\include" $opusIncludeDir -Recurse
+
+      - name: Build PJProject static library
+        shell: pwsh
+        run: |
+          $buildRoot = Join-Path $env:RUNNER_TEMP 'microsip-build'
+          $opusIncludeDir = Join-Path $buildRoot 'third_party\opus\include'
+          @'
+          #define PJMEDIA_HAS_OPUS_CODEC 1
+          '@ | Set-Content "$buildRoot\pjlib\include\pj\config_site.h"
+          $env:CL = "/I`"$opusIncludeDir`" $env:CL"
+          msbuild "$buildRoot\pjproject-vs14.sln" /m /t:Build `
+            /p:Configuration=Release-Static /p:Platform=Win32 `
+            /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
+          if ($LASTEXITCODE -ne 0) { throw "PJProject build failed with exit code $LASTEXITCODE" }
+
+          $pjprojectLibrary = Join-Path $buildRoot 'lib\libpjproject-i386-Win32-vc14-Release-Static.lib'
+          if (!(Test-Path $pjprojectLibrary)) {
+            throw "Expected PJProject library was not produced: $pjprojectLibrary"
+          }
+
+      - name: Build MicroSIP Win32 Release
+        shell: pwsh
+        run: |
+          $buildRoot = Join-Path $env:RUNNER_TEMP 'microsip-build'
+          $projectDir = Join-Path $buildRoot 'MicroSIP-3.22.3-src'
+          $artifactDir = Join-Path $buildRoot 'artifact'
+          $intermediateDir = Join-Path $buildRoot 'obj\microsip'
+          New-Item -ItemType Directory -Path $artifactDir, $intermediateDir -Force | Out-Null
+
+          msbuild "$projectDir\microsip.vcxproj" /m /t:Build `
+            /p:Configuration=Release /p:Platform=Win32 `
+            /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 `
+            "/p:OutDir=$artifactDir\\" "/p:IntDir=$intermediateDir\\"
+          if ($LASTEXITCODE -ne 0) { throw "MicroSIP build failed with exit code $LASTEXITCODE" }
+
+          $executable = Join-Path $artifactDir 'microsip.exe'
+          if (!(Test-Path $executable)) {
+            Get-ChildItem $buildRoot -Filter '*.exe' -Recurse | Format-Table FullName
+            throw "Expected executable was not produced: $executable"
+          }
+
+          Get-ChildItem $artifactDir -Force | Format-Table Name, Length
+
+      - name: Upload MicroSIP Win32 Release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroSIP-Win32-Release
+          path: ${{ runner.temp }}/microsip-build/artifact
+          if-no-files-found: error
