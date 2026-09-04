@@ -95,6 +95,7 @@ jobs:
           $opusLibraryDir = Join-Path $buildRoot 'third_party\opus\Win32'
           @'
           #define PJMEDIA_HAS_OPUS_CODEC 1
+          #define PJMEDIA_HAS_VIDEO 1
           '@ | Set-Content "$buildRoot\pjlib\include\pj\config_site.h"
           $env:CL = "/I`"$opusIncludeDir`" $env:CL"
           $env:LIB = "$opusLibraryDir;$env:LIB"
