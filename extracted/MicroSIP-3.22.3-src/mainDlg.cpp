@@ -1859,6 +1859,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_WM_MOVE()
 	ON_WM_SIZE()
 	ON_WM_EXITSIZEMOVE()
+	ON_WM_GETMINMAXINFO()
 	ON_WM_CLOSE()
 	ON_WM_CTLCOLOR()
 	ON_WM_CONTEXTMENU()
@@ -1981,6 +1982,7 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	newMessages = false;
 	missed = false;
 	m_snappingMainWindow = false;
+	m_lockedWindowWidth = 0;
 
 	usersDirectoryLoaded = false;
 	shortcutsURLLoaded = false;
@@ -2230,6 +2232,8 @@ BOOL CmainDlg::OnInitDialog()
 	messagesDlg->SetWindowPos(NULL, messagesX, messagesY, messagesW, messagesH, SWP_NOZORDER);
 	SetWindowPos(accountSettings.alwaysOnTop ? &CWnd::wndTopMost : &CWnd::wndNoTopMost, mx, my, mW, mH, NULL);
 	SnapMainWindowToWorkArea();
+	GetWindowRect(&rect);
+	m_lockedWindowWidth = rect.Width();
 
 	imageListStatus = new CImageList();
 	imageListStatus->Create(16, 16, ILC_COLOR32, 3, 3);
@@ -2535,6 +2539,7 @@ void CmainDlg::ApplyDarkMode()
 		enabled = FALSE;
 	}
 	SetWindowTheme(m_ButtonMenu.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
+	SetWindowTheme(m_bar.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
 	CStatusBarCtrl& statusctrl = m_bar.GetStatusBarCtrl();
 	statusctrl.SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
 	if (pageDialer) {
@@ -5230,6 +5235,30 @@ void CmainDlg::OnSize(UINT type, int w, int h)
 void CmainDlg::OnExitSizeMove()
 {
 	SnapMainWindowToWorkArea();
+}
+
+void CmainDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
+{
+	CBaseDialog::OnGetMinMaxInfo(lpMMI);
+	if (!m_lockedWindowWidth) {
+		return;
+	}
+	MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+	if (!GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+		return;
+	}
+	CRect windowRect;
+	CRect visibleRect;
+	GetWindowRect(&windowRect);
+	if (FAILED(DwmGetWindowAttribute(m_hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visibleRect, sizeof(visibleRect)))) {
+		visibleRect = windowRect;
+	}
+	int targetHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top
+		+ (visibleRect.top - windowRect.top) + (windowRect.bottom - visibleRect.bottom);
+	lpMMI->ptMinTrackSize.x = m_lockedWindowWidth;
+	lpMMI->ptMaxTrackSize.x = m_lockedWindowWidth;
+	lpMMI->ptMinTrackSize.y = targetHeight;
+	lpMMI->ptMaxTrackSize.y = targetHeight;
 }
 
 void CmainDlg::SnapMainWindowToWorkArea()

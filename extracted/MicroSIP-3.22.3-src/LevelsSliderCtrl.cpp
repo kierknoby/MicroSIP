@@ -1,5 +1,7 @@
 #include "LevelsSliderCtrl.h"
 #include "const.h"
+#include "global.h"
+#include "settings.h"
 
 BEGIN_MESSAGE_MAP(CLevelsSliderCtrl, CSliderCtrl)
 	ON_NOTIFY_REFLECT(NM_CUSTOMDRAW, OnCustomDraw)
@@ -28,7 +30,7 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 				else {
 					rect.DeflateRect(MulDiv(3, dpiY, 96), MulDiv(6, dpiY, 96));
 				}
-				pDC->FillSolidRect(&rect, RGB(170, 170, 170));
+				pDC->FillSolidRect(&rect, accountSettings.darkMode ? RGB(190, 198, 206) : RGB(170, 170, 170));
 			}
 			*result = CDRF_SKIPDEFAULT;
 			break;
@@ -54,10 +56,10 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 					selmin = (int)(((double)(selmin - min) / max * rect.Height()) + 0.5) + rect.top;
 					selmax = (int)(((double)(selmax - min) / max * rect.Height()) + 0.5) + rect.top;
 					if (!IsActive) {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), pDC->GetBkColor());
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? RGB(43, 48, 54) : pDC->GetBkColor());
 					}
 					else {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), GetSysColor(COLOR_WINDOW));
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? RGB(43, 48, 54) : GetSysColor(COLOR_WINDOW));
 					}
 					pDC->FillSolidRect(CRect(rect.left, selmin, rect.right, selmax), hot ? RGB(255, 0, 0) : GetSysColor(COLOR_HIGHLIGHT));
 					pDC->ExcludeClipRect(rect);
@@ -73,10 +75,10 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 					selmin = (int)(((double)(selmin - min) / max * rect.Width()) + 0.5) + rect.left;
 					selmax = (int)(((double)(selmax - min) / max * rect.Width()) + 0.5) + rect.left;
 					if (!IsActive) {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), pDC->GetBkColor());
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? RGB(43, 48, 54) : pDC->GetBkColor());
 					}
 					else {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), GetSysColor(COLOR_WINDOW));
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? RGB(43, 48, 54) : GetSysColor(COLOR_WINDOW));
 					}
 					pDC->FillSolidRect(CRect(selmin, rect.top, selmax, rect.bottom), hot ? RGB(255, 0, 0) : GetSysColor(COLOR_HIGHLIGHT));
 					pDC->ExcludeClipRect(rect);

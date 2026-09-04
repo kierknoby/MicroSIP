@@ -108,8 +108,9 @@ public:
 		LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
 		for (int i = 0; i < buttons.GetCount(); i++) {
 			SetWindowTheme(buttons[i]->m_hWnd, theme, NULL);
+			buttons[i]->Invalidate();
 		}
-		RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+		Invalidate();
 	}
 
 protected:
@@ -123,7 +124,7 @@ protected:
 		}
 		return CWnd::OnEraseBkgnd(dc);
 	}
-	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd*, UINT controlColor)
+	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd* child, UINT controlColor)
 	{
 		if (darkMode && (controlColor == CTLCOLOR_STATIC || controlColor == CTLCOLOR_DLG)) {
 			static CBrush darkBrush(RGB(30, 34, 38));
@@ -131,7 +132,7 @@ protected:
 			dc->SetBkColor(RGB(30, 34, 38));
 			return darkBrush;
 		}
-		return CWnd::OnCtlColor(dc, NULL, controlColor);
+		return CWnd::OnCtlColor(dc, child, controlColor);
 	}
 	afx_msg void OnKillFocus(CWnd* newWindow)
 	{
@@ -1030,6 +1031,19 @@ void Dialer::SetDarkMode(bool enabled)
 	SetWindowTheme(m_ButtonCallTrace.m_hWnd, theme, NULL);
 	SetWindowTheme(m_AccountSwitch.m_hWnd, theme, NULL);
 	SetWindowTheme(GetDlgItem(IDC_NUMBER)->m_hWnd, theme, NULL);
+	SetWindowTheme(GetDlgItem(IDC_VIDEO_CALL)->m_hWnd, theme, NULL);
+	SetWindowTheme(GetDlgItem(IDC_MESSAGE)->m_hWnd, theme, NULL);
+	SetWindowTheme(GetDlgItem(IDC_BUTTON_MUTE_OUTPUT)->m_hWnd, theme, NULL);
+	SetWindowTheme(GetDlgItem(IDC_BUTTON_MUTE_INPUT)->m_hWnd, theme, NULL);
+	SetWindowTheme(m_SliderCtrlOutput.m_hWnd, theme, NULL);
+	SetWindowTheme(m_SliderCtrlInput.m_hWnd, theme, NULL);
+	GetDlgItem(IDC_NUMBER)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	GetDlgItem(IDC_VIDEO_CALL)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	GetDlgItem(IDC_MESSAGE)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	GetDlgItem(IDC_BUTTON_MUTE_OUTPUT)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	GetDlgItem(IDC_BUTTON_MUTE_INPUT)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	m_SliderCtrlOutput.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	m_SliderCtrlInput.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	if (m_accountSidecar) {
 		m_accountSidecar->SetDarkMode(enabled);
 	}
@@ -1042,7 +1056,6 @@ void Dialer::OpenAccountSidecar()
 		m_accountSidecar = new CAccountSidecar(this);
 		m_accountSidecar->CreateEx(WS_EX_TOOLWINDOW, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL, WS_POPUP | WS_BORDER, CRect(0, 0, 0, 0), GetParent(), 0);
 	}
-	m_accountSidecar->SetDarkMode(accountSettings.darkMode);
 	m_accountSidecar->ShowAccounts();
 }
 

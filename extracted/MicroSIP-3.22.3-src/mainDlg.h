@@ -94,6 +94,7 @@ public:
 	int heightAdd;
 	bool missed;
 	bool m_snappingMainWindow;
+	int m_lockedWindowWidth;
 
 	CString callIdIncomingIgnore;
 	CList<int,int> toneCalls;
@@ -239,6 +240,7 @@ public:
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnSize(UINT type, int w, int h);
 	afx_msg void OnExitSizeMove();
+	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
 	afx_msg void OnMenuDarkMode();
 	afx_msg LRESULT onShellHookMessage(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallAnswer(WPARAM wParam,LPARAM lParam);

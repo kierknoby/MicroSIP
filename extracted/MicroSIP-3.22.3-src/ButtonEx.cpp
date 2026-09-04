@@ -18,6 +18,8 @@
 
 #include "StdAfx.h"   
 #include "ButtonEx.h"   
+#include "global.h"
+#include "settings.h"
 
 // CButtonEx   
 IMPLEMENT_DYNAMIC(CButtonEx, CMFCButton)
@@ -49,9 +51,14 @@ BOOL CButtonEx::EnableWindow(BOOL bEnable)
 		SetFaceColor(m_FaceColor, true);
 	}
 	else {
-//		SetTextColor(RGB(123, 123, 123));
-		SetTextColor(RGB(0, 0, 0));
-		SetFaceColor(RGB(222, 222, 222), true);
+		if (accountSettings.darkMode) {
+			SetTextColor(RGB(165, 172, 180));
+			SetFaceColor(RGB(43, 48, 54), true);
+		}
+		else {
+			SetTextColor(RGB(0, 0, 0));
+			SetFaceColor(RGB(222, 222, 222), true);
+		}
 	}
 	return CMFCButton::EnableWindow(bEnable);
 }

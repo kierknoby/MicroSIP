@@ -2,6 +2,8 @@
 #include "mainDlg.h"
 #include "ClosableTabCtrl.h"
 #include "VisualStylesXP.h"
+#include "global.h"
+#include "settings.h"
 
 
 // _WIN32_WINNT >= 0x0501 (XP only)
@@ -215,6 +217,16 @@ void CClosableTabCtrl::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 	CDC* pDC = CDC::FromHandle(lpDIS->hDC);
 	if (!pDC)
 		return;
+	if (accountSettings.darkMode) {
+		pDC->FillSolidRect(rect, bSelected ? RGB(59, 68, 77) : RGB(43, 48, 54));
+		pDC->Draw3dRect(rect, RGB(71, 78, 86), RGB(30, 34, 38));
+		int oldBkMode = pDC->SetBkMode(TRANSPARENT);
+		COLORREF oldColor = pDC->SetTextColor((tci.dwState & TCIS_HIGHLIGHTED) ? RGB(255, 170, 170) : RGB(235, 238, 241));
+		pDC->DrawText(szLabel, rect, DT_SINGLELINE | DT_VCENTER | DT_CENTER);
+		pDC->SetTextColor(oldColor);
+		pDC->SetBkMode(oldBkMode);
+		return;
+	}
 
 	CRect rcFullItem(lpDIS->rcItem);
 	bool bSelected = (lpDIS->itemState & ODS_SELECTED) != 0;
@@ -558,6 +570,12 @@ HBRUSH CClosableTabCtrl::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 // Vista: Can not be used to workaround the problems with owner drawn tab control
 BOOL CClosableTabCtrl::OnEraseBkgnd(CDC* pDC)
 {
+	if (accountSettings.darkMode) {
+		CRect rect;
+		GetClientRect(&rect);
+		pDC->FillSolidRect(rect, RGB(30, 34, 38));
+		return TRUE;
+	}
 	return CTabCtrl::OnEraseBkgnd(pDC);
 }
 
