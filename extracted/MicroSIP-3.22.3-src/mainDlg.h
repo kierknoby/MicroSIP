@@ -183,7 +183,8 @@ protected:
 	HICON iconMissed;
 	NOTIFYICONDATA tnd;
 	StatusBar m_bar;
-	class CFreepbxFooter* m_freepbxFooter;
+	class CFreepbxFooter;
+	CFreepbxFooter* m_freepbxFooter;
 	ULONG_PTR m_gdiplusToken;
 	CMMNotificationClient *mmNotificationClient;
 
