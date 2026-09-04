@@ -110,20 +110,23 @@ protected:
 		if (!image) {
 			return;
 		}
-		const int margin = MulDiv(16, dpiY, 96);
+		const int horizontalMargin = MulDiv(16, dpiY, 96);
+		const int verticalPadding = MulDiv(8, dpiY, 96);
+		const int contentGap = MulDiv(4, dpiY, 96);
+		const int attributionHeight = MulDiv(12, dpiY, 96);
+		Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(8, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
 		double scale = min(
-			(double)(client.Width() - margin * 2) / image->GetWidth(),
-			(double)(client.Height() - margin * 2) / image->GetHeight());
+			(double)(client.Width() - horizontalMargin * 2) / image->GetWidth(),
+			(double)(client.Height() - verticalPadding * 2 - contentGap - attributionHeight) / image->GetHeight());
 		scale = min(1.0, max(0.0, scale));
 		int width = (int)(image->GetWidth() * scale);
 		int height = (int)(image->GetHeight() * scale);
 		int left = (client.Width() - width) / 2;
-		int top = margin;
+		int top = verticalPadding;
 		freepbxLinkRect = CRect(left, top, left + width, top + height);
 		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
 		graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
 
-		Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(8, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
 		Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 100, 100, 100));
 		Gdiplus::SolidBrush linkBrush(Gdiplus::Color(255, 40, 90, 150));
 		Gdiplus::RectF measured;
@@ -139,7 +142,7 @@ protected:
 		suffixWidth = measured.Width;
 		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth;
 		Gdiplus::REAL textX = (Gdiplus::REAL)((client.Width() - textWidth) / 2);
-		Gdiplus::REAL textY = (Gdiplus::REAL)(client.Height() - margin - MulDiv(10, dpiY, 96));
+		Gdiplus::REAL textY = (Gdiplus::REAL)(top + height + contentGap);
 		graphics.DrawString(prefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
 		textX += prefixWidth;
 		microsipLinkRect = CRect((int)textX, (int)textY, (int)(textX + linkWidth), (int)(textY + MulDiv(12, dpiY, 96)));

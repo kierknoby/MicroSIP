@@ -47,6 +47,9 @@ public:
 		}
 		buttons.RemoveAll();
 		accountIds.RemoveAll();
+		if (::IsWindow(emptyState.m_hWnd)) {
+			emptyState.DestroyWindow();
+		}
 
 		int width = MulDiv(190, dpiY, 96);
 		int buttonHeight = MulDiv(34, dpiY, 96);
@@ -69,8 +72,12 @@ public:
 			accountId++;
 		}
 
+		int height = buttons.GetCount() * buttonHeight;
 		if (!buttons.GetCount()) {
-			return;
+			emptyState.Create(Translate(_T("No accounts configured")), WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+				CRect(0, 0, width, buttonHeight), this);
+			emptyState.SetFont(owner->GetFont());
+			height = buttonHeight;
 		}
 		CRect identityRect;
 		CWnd* identity = owner->GetDlgItem(IDC_DIALER_ACCOUNT_IDENTITY);
@@ -80,7 +87,6 @@ public:
 		mainWindow->GetWindowRect(&mainRect);
 		MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
 		GetMonitorInfo(MonitorFromWindow(mainWindow->m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
-		int height = buttons.GetCount() * buttonHeight;
 		int x = mainRect.left - width - MulDiv(4, dpiY, 96);
 		int y = identityRect.top;
 		if (x < monitorInfo.rcWork.left) {
@@ -89,7 +95,9 @@ public:
 		x = max(monitorInfo.rcWork.left, min(x, monitorInfo.rcWork.right - width));
 		y = max(monitorInfo.rcWork.top, min(y, monitorInfo.rcWork.bottom - height));
 		SetWindowPos(&CWnd::wndTop, x, y, width, height, SWP_SHOWWINDOW);
-		buttons[0]->SetFocus();
+		if (buttons.GetCount()) {
+			buttons[0]->SetFocus();
+		}
 	}
 
 protected:
@@ -137,6 +145,7 @@ private:
 	Dialer* owner;
 	CArray<CButton*, CButton*> buttons;
 	CArray<int, int> accountIds;
+	CStatic emptyState;
 };
 
 BEGIN_MESSAGE_MAP(Dialer::CAccountSidecar, CWnd)
@@ -912,7 +921,18 @@ void Dialer::RebuildButtons(bool init)
 			rect.left -= stepPx;
 			rect.right -= stepPx;
 		}
-		CRect identityRect = rect;
+		CRect lowerControlsRect = rect;
+		const int rowGap = MulDiv(6, dpiY, 96);
+		CRect utilityRect;
+		CRect clientRect;
+		GetClientRect(&clientRect);
+		utilityRect.left = MulDiv(4, dpiY, 96);
+		utilityRect.right = clientRect.right - MulDiv(4, dpiY, 96);
+		utilityRect.top = lowerControlsRect.bottom + rowGap;
+		utilityRect.bottom = utilityRect.top + lowerControlsRect.Height();
+		CRect identityRect = utilityRect;
+		identityRect.top = utilityRect.bottom + rowGap;
+		identityRect.bottom = identityRect.top + lowerControlsRect.Height();
 		identityRect.left = MulDiv(4, dpiY, 96);
 		int switchWidth = MulDiv(24, dpiY, 96);
 		CRect switchRect = identityRect;
@@ -929,13 +949,6 @@ void Dialer::RebuildButtons(bool init)
 		AutoMove(m_AccountIdentity.m_hWnd, 100, 100, 0, 0);
 		UpdateAccountIdentity();
 
-		CRect utilityRect;
-		CRect clientRect;
-		GetClientRect(&clientRect);
-		utilityRect.left = MulDiv(4, dpiY, 96);
-		utilityRect.right = clientRect.right - MulDiv(4, dpiY, 96);
-		utilityRect.bottom = identityRect.top - MulDiv(3, dpiY, 96);
-		utilityRect.top = utilityRect.bottom - identityRect.Height();
 		int utilityWidth = utilityRect.Width() / 3;
 		CRect spkClockRect = utilityRect;
 		spkClockRect.right = spkClockRect.left + utilityWidth;
