@@ -383,13 +383,21 @@ struct call_tonegen_data* call_init_tonegen(pjsua_call_id call_id)
 }
 
 static call_tonegen_data* dialTone = NULL;
+static const char* dialToneErrorStage = "not started";
+
+const char* dial_tone_error_stage()
+{
+	return dialToneErrorStage;
+}
 
 pj_status_t dial_tone_start()
 {
 	dial_tone_stop();
+	dialToneErrorStage = "SIP media subsystem";
 	if (!is_pjsua_running()) {
 		return PJ_EINVALIDOP;
 	}
+	dialToneErrorStage = "tone memory allocation";
 	pj_pool_t* pool = pjsua_pool_create("dial_tone", 512, 512);
 	if (!pool) {
 		return PJ_ENOMEM;
@@ -397,11 +405,14 @@ pj_status_t dial_tone_start()
 	call_tonegen_data* tone = PJ_POOL_ZALLOC_T(pool, call_tonegen_data);
 	tone->pool = pool;
 	tone->toneslot = PJSUA_INVALID_ID;
+	dialToneErrorStage = "tone generator creation";
 	pj_status_t status = pjmedia_tonegen_create(pool, 8000, 1, 160, 16, 0, &tone->tonegen);
 	if (status == PJ_SUCCESS) {
+		dialToneErrorStage = "conference-port registration";
 		status = pjsua_conf_add_port(pool, tone->tonegen, &tone->toneslot);
 	}
 	if (status == PJ_SUCCESS) {
+		dialToneErrorStage = "350 + 450 Hz tone generation";
 		pjmedia_tone_desc ukTone;
 		pj_bzero(&ukTone, sizeof(ukTone));
 		ukTone.freq1 = 350;
@@ -413,6 +424,7 @@ pj_status_t dial_tone_start()
 	}
 	if (status == PJ_SUCCESS) {
 		pjsua_conf_adjust_rx_level(tone->toneslot, 0.0f);
+		dialToneErrorStage = "active playback connection";
 		status = pjsua_conf_connect(tone->toneslot, 0);
 	}
 	if (status != PJ_SUCCESS) {
@@ -426,6 +438,7 @@ pj_status_t dial_tone_start()
 		return status;
 	}
 	dialTone = tone;
+	dialToneErrorStage = "none";
 	// A short gain ramp supplements PJMEDIA's tone fade and avoids a click at the sound-device boundary.
 	for (int step = 1; step <= 4; ++step) {
 		pjsua_conf_adjust_rx_level(tone->toneslot, 0.15f * step);

@@ -4030,9 +4030,8 @@ void CmainDlg::OnTimer(UINT_PTR TimerVal)
 		m_dialToneReadyTick = 0;
 		m_dialToneReadyAccount = PJSUA_INVALID_ID;
 		if (m_callTracePanel && ::IsWindow(m_callTracePanel->m_hWnd)) {
-			m_callTracePanel->Append(_T("SIP OPTIONS   NOT READY · no response within 3000 ms"));
-			m_callTracePanel->Append(_T("Resolution     NOT READY · signalling transaction not established"));
-			m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+			m_callTracePanel->Append(_T("SIP           NOT READY · no OPTIONS response · 3000 ms"));
+			m_callTracePanel->Append(_T("Dial-Tone     NOT READY"));
 		}
 	}
 	else if (TimerVal == IDT_TIMER_AUTOANSWER) {
@@ -6638,60 +6637,49 @@ void CmainDlg::BeginDialToneReadiness()
 		SetDialToneSessionActive(false);
 		return;
 	}
-	m_callTracePanel->Append(_T("Dial-Tone requested"));
-	m_callTracePanel->Append(_T("Scope         SIP signalling and local audio only; routing, PSTN and RTP are not proven"));
+	m_callTracePanel->Append(_T("Dial-Tone     CHECKING"));
 
 	if (messagesDlg && messagesDlg->GetCallsCount()) {
-		m_callTracePanel->Append(_T("Account       NOT READY · a call is already active"));
-		m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+		m_callTracePanel->Append(_T("Dial-Tone     NOT READY · a call is already active"));
 		m_dialToneCheckPending = false;
 		SetDialToneSessionActive(false);
 		return;
 	}
 	if (!accountSettings.accountId || !is_pjsua_running() || !pjsua_acc_is_valid(account)) {
-		m_callTracePanel->Append(_T("Account       NOT READY · no enabled SIP account"));
-		m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+		m_callTracePanel->Append(_T("PBX           NOT READY · no enabled SIP account"));
 		m_dialToneCheckPending = false;
 		SetDialToneSessionActive(false);
 		return;
 	}
-	m_callTracePanel->Append(_T("Account       READY · ") + accountSettings.account.username);
-
 	pjsua_acc_info accountInfo;
 	if (pjsua_acc_get_info(account, &accountInfo) != PJ_SUCCESS) {
-		m_callTracePanel->Append(_T("Registration  NOT READY · state unavailable"));
+		m_callTracePanel->Append(_T("PBX           NOT READY · registration state unavailable"));
 		m_dialToneBaseState = 2;
 	}
 	else if (accountInfo.has_registration && accountInfo.status == PJSIP_SC_OK) {
 		CString line;
 		if (accountInfo.expires != PJSIP_EXPIRES_NOT_SPECIFIED) {
-			line.Format(_T("Registration  READY · SIP 200 · refresh due in %d s"), accountInfo.expires);
+			line.Format(_T("PBX           READY · registered · refresh in %d s"), accountInfo.expires);
 		}
 		else {
-			line = _T("Registration  READY · SIP 200");
+			line = _T("PBX           READY · registered");
 		}
 		m_callTracePanel->Append(line);
 	}
 	else if (!accountInfo.has_registration) {
-		m_callTracePanel->Append(_T("Registration  DEGRADED · account has no registrar"));
+		m_callTracePanel->Append(_T("PBX           DEGRADED · account has no registrar"));
 		m_dialToneBaseState = max(m_dialToneBaseState, 1);
 	}
 	else {
 		CString line;
-		line.Format(_T("Registration  NOT READY · SIP %d"), accountInfo.status);
+		line.Format(_T("PBX           NOT READY · registration SIP %d"), accountInfo.status);
 		m_callTracePanel->Append(line);
 		m_dialToneBaseState = 2;
 	}
 
 	if (m_dialToneServer.IsEmpty()) {
-		m_callTracePanel->Append(_T("SIP server    NOT READY · not configured"));
+		m_callTracePanel->Append(_T("SIP           NOT READY · server not configured"));
 		m_dialToneBaseState = 2;
-	}
-	else {
-		m_callTracePanel->Append(_T("SIP server    CHECKING · ") + m_dialToneServer);
-		if (!accountSettings.account.proxy.IsEmpty()) {
-			m_callTracePanel->Append(_T("Outbound proxy CHECKING · ") + accountSettings.account.proxy);
-		}
 	}
 
 	pjsua_transport_id transportId = transport_udp;
@@ -6699,63 +6687,56 @@ void CmainDlg::BeginDialToneReadiness()
 	else if (!m_dialToneTransport.CompareNoCase(_T("TLS"))) transportId = transport_tls;
 	pjsua_transport_info transportInfo;
 	if (transportId == PJSUA_INVALID_ID || pjsua_transport_get_info(transportId, &transportInfo) != PJ_SUCCESS) {
-		m_callTracePanel->Append(_T("Transport     NOT READY · ") + m_dialToneTransport + _T(" unavailable"));
+		m_callTracePanel->Append(_T("SIP           NOT READY · ") + m_dialToneTransport + _T(" transport unavailable"));
 		m_dialToneBaseState = 2;
 	}
-	else {
-		m_callTracePanel->Append(_T("Transport     READY · ") + m_dialToneTransport + _T(" listener available"));
-	}
+
 
 	UpdateSoundDevicesIds();
 	unsigned deviceCount = PJMEDIA_AUD_MAX_DEVS;
 	pjmedia_aud_dev_info devices[PJMEDIA_AUD_MAX_DEVS];
 	bool enumerated = pjsua_enum_aud_devs(devices, &deviceCount) == PJ_SUCCESS;
-	bool speakerPresent = enumerated && msip_audio_output >= 0
-		&& (unsigned)msip_audio_output < deviceCount && devices[msip_audio_output].output_count > 0;
-	bool microphonePresent = enumerated && msip_audio_input >= 0
-		&& (unsigned)msip_audio_input < deviceCount && devices[msip_audio_input].input_count > 0;
 	pj_status_t audioStatus = PJ_EUNKNOWN;
 	DWORD audioStarted = GetTickCount();
-	if (speakerPresent && microphonePresent) {
+	if (enumerated) {
 		pjsua_snd_dev_param sound;
 		pjsua_snd_dev_param_default(&sound);
 		sound.capture_dev = msip_audio_input;
 		sound.playback_dev = msip_audio_output;
 		audioStatus = pjsua_set_snd_dev2(&sound);
 	}
+	int activeInput = msip_audio_input;
+	int activeOutput = msip_audio_output;
+	if (audioStatus == PJ_SUCCESS
+		&& (!pjsua_snd_is_active() || pjsua_get_snd_dev(&activeInput, &activeOutput) != PJ_SUCCESS)) {
+		audioStatus = PJ_EUNKNOWN;
+	}
 	m_dialToneAudioMs = GetTickCount() - audioStarted;
-	if (speakerPresent && audioStatus == PJ_SUCCESS) {
-		CString line;
-		line.Format(_T("Speaker       READY · %s · default %u Hz"),
-			MSIP::Utf8DecodeUni(devices[msip_audio_output].name), devices[msip_audio_output].default_samples_per_sec);
-		m_callTracePanel->Append(line);
-	}
-	else {
-		CString detail = speakerPresent ? pj_error_text(audioStatus) : _T("selected device unavailable");
-		m_callTracePanel->Append(_T("Speaker       NOT READY · ") + detail);
-		m_dialToneBaseState = 2;
-	}
-	if (microphonePresent && audioStatus == PJ_SUCCESS) {
-		CString line;
-		line.Format(_T("Microphone    READY · %s · default %u Hz"),
-			MSIP::Utf8DecodeUni(devices[msip_audio_input].name), devices[msip_audio_input].default_samples_per_sec);
-		m_callTracePanel->Append(line);
-	}
-	else {
-		CString detail = microphonePresent ? pj_error_text(audioStatus) : _T("selected device unavailable");
-		m_callTracePanel->Append(_T("Microphone    NOT READY · ") + detail);
-		m_dialToneBaseState = 2;
-	}
 	if (audioStatus == PJ_SUCCESS) {
+		CString speaker = activeOutput >= 0 && (unsigned)activeOutput < deviceCount
+			? MSIP::Utf8DecodeUni(devices[activeOutput].name) : _T("System default playback");
+		CString microphone = activeInput >= 0 && (unsigned)activeInput < deviceCount
+			? MSIP::Utf8DecodeUni(devices[activeInput].name) : _T("System default capture");
 		CString line;
-		line.Format(_T("Audio          READY · devices initialised in %lu ms"), m_dialToneAudioMs);
+		line.Format(_T("Audio         READY · %s / %s · %lu ms"), speaker, microphone, m_dialToneAudioMs);
 		m_callTracePanel->Append(line);
-		pjsua_conf_port_info portInfo;
-		if (pjsua_conf_get_port_info(0, &portInfo) == PJ_SUCCESS) {
-			line.Format(_T("Audio bridge   READY · %u Hz · %u channel%s · %u-bit"), portInfo.clock_rate,
-				portInfo.channel_count, portInfo.channel_count == 1 ? _T("") : _T("s"), portInfo.bits_per_sample);
-			m_callTracePanel->Append(line);
+	}
+	else {
+		CString configuredSpeaker = accountSettings.audioOutputDevice.IsEmpty()
+			? _T("System default playback") : accountSettings.audioOutputDevice;
+		CString configuredMicrophone = accountSettings.audioInputDevice.IsEmpty()
+			? _T("System default capture") : accountSettings.audioInputDevice;
+		CString line;
+		if (!enumerated) {
+			line = _T("Audio         NOT READY · device enumeration failed");
 		}
+		else {
+			line.Format(_T("Audio         NOT READY · could not open %s / %s (%d/%d) · %s"),
+				configuredSpeaker, configuredMicrophone, msip_audio_output, msip_audio_input,
+				pj_error_text(audioStatus));
+		}
+		m_callTracePanel->Append(line);
+		m_dialToneBaseState = 2;
 	}
 
 	unsigned codecCount = PJMEDIA_CODEC_MGR_MAX_CODECS;
@@ -6765,20 +6746,22 @@ void CmainDlg::BeginDialToneReadiness()
 		for (unsigned i = 0; i < codecCount; ++i) {
 			if (codecInfo[i].priority) {
 				if (!codecs.IsEmpty()) codecs += _T(", ");
-				codecs += MSIP::PjToStr(&codecInfo[i].codec_id);
+				CString codec = MSIP::PjToStr(&codecInfo[i].codec_id);
+				int slash = codec.Find(_T('/'));
+				codecs += slash == -1 ? codec : codec.Left(slash);
 			}
 		}
 	}
 	if (codecs.IsEmpty()) {
-		m_callTracePanel->Append(_T("Audio codecs  NOT READY · no enabled codec observed"));
+		m_callTracePanel->Append(_T("Codecs        NOT READY · no enabled audio codec"));
 		m_dialToneBaseState = 2;
 	}
 	else {
-		m_callTracePanel->Append(_T("Audio codecs  READY · ") + codecs);
+		m_callTracePanel->Append(_T("Codecs        READY · ") + codecs);
 	}
 
 	if (m_dialToneBaseState == 2) {
-		m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+		m_callTracePanel->Append(_T("Dial-Tone     NOT READY"));
 		m_dialToneCheckPending = false;
 		SetDialToneSessionActive(false);
 		return;
@@ -6807,8 +6790,7 @@ void CmainDlg::BeginDialToneReadiness()
 	free(method.ptr);
 	if (sendStatus != PJ_SUCCESS) {
 		delete request;
-		m_callTracePanel->Append(_T("SIP OPTIONS   NOT READY · ") + pj_error_text(sendStatus));
-		m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+		m_callTracePanel->Append(_T("SIP           NOT READY · OPTIONS send failed · ") + pj_error_text(sendStatus));
 		m_dialToneCheckPending = false;
 		SetDialToneSessionActive(false);
 		return;
@@ -6831,46 +6813,31 @@ LRESULT CmainDlg::onDialToneOptions(WPARAM, LPARAM lParam)
 	int state = m_dialToneBaseState;
 	CString line;
 	if (result->statusCode >= 200 && result->statusCode < 300) {
-		line.Format(_T("SIP OPTIONS   READY · SIP %d %s · %lu ms"), result->statusCode,
-			result->statusText, result->elapsed);
+		CString transport = result->activeTransport.IsEmpty() ? m_dialToneTransport : result->activeTransport;
+		CString peer = result->responseSource.IsEmpty() ? m_dialToneServer : result->responseSource;
+		line.Format(_T("SIP           READY · %d %s · %lu ms · %s · %s"), result->statusCode,
+			result->statusText, result->elapsed, transport, peer);
 		if (result->elapsed > 1000) {
-			line += _T(" · above 1000 ms application responsiveness threshold");
+			line += _T(" · slow response");
 			state = max(state, 1);
-		}
-		if (!result->responseSource.IsEmpty()) {
-			m_callTracePanel->Append(_T("Resolved peer  READY · response received from ") + result->responseSource);
-		}
-		else {
-			m_callTracePanel->Append(_T("Resolution     READY · PJSIP completed routing; response IP not exposed"));
 		}
 	}
 	else if (result->statusCode > 0 && result->statusCode < 500) {
-		line.Format(_T("SIP OPTIONS   DEGRADED · SIP %d %s · %lu ms"), result->statusCode,
+		line.Format(_T("SIP           DEGRADED · %d %s · %lu ms"), result->statusCode,
 			result->statusText, result->elapsed);
 		state = max(state, 1);
-		CString resolution = _T("Resolution     READY · SIP response received");
-		if (!result->responseSource.IsEmpty()) {
-			resolution += _T(" from ") + result->responseSource;
-		}
-		m_callTracePanel->Append(resolution);
 	}
 	else {
 		if (result->statusCode) {
-			line.Format(_T("SIP OPTIONS   NOT READY · SIP %d · %lu ms"), result->statusCode, result->elapsed);
+			line.Format(_T("SIP           NOT READY · %d %s · %lu ms"), result->statusCode,
+				result->statusText, result->elapsed);
 		}
 		else {
-			line.Format(_T("SIP OPTIONS   NOT READY · no SIP response · %lu ms"), result->elapsed);
+			line.Format(_T("SIP           NOT READY · no OPTIONS response · %lu ms"), result->elapsed);
 		}
 		state = 2;
-		m_callTracePanel->Append(_T("Resolution     NOT READY · signalling transaction failed"));
 	}
 	m_callTracePanel->Append(line);
-	if (!result->activeTransport.IsEmpty()) {
-		m_callTracePanel->Append(_T("Active transport USED · ") + result->activeTransport);
-	}
-	if (!result->localAddress.IsEmpty()) {
-		m_callTracePanel->Append(_T("Local signalling OBSERVED · ") + result->localAddress);
-	}
 
 	if (state == 0) {
 		CString target;
@@ -6879,7 +6846,7 @@ LRESULT CmainDlg::onDialToneOptions(WPARAM, LPARAM lParam)
 			target.Trim();
 		}
 		if (!target.IsEmpty()) {
-			m_callTracePanel->Append(_T("Pre-call      READY · dial target already entered; tone withheld"));
+			m_callTracePanel->Append(_T("Dial-Tone     READY · target entered; tone withheld"));
 			m_dialToneReadyTick = GetTickCount();
 			m_dialToneReadyAccount = account;
 			SetDialToneSessionActive(false);
@@ -6888,43 +6855,28 @@ LRESULT CmainDlg::onDialToneOptions(WPARAM, LPARAM lParam)
 		}
 		pj_status_t toneStatus = dial_tone_start();
 		if (toneStatus == PJ_SUCCESS) {
-			m_callTracePanel->Append(_T("Pre-call      READY"));
-			if (m_dialToneSampleCount) {
-				DWORD optionsTotal = 0, audioTotal = 0;
-				for (unsigned i = 0; i < m_dialToneSampleCount; ++i) {
-					optionsTotal += m_dialToneOptionsSamples[i];
-					audioTotal += m_dialToneAudioSamples[i];
-				}
-				CString baseline;
-				baseline.Format(_T("Recent READY   typical OPTIONS %lu ms · audio %lu ms · %u sample%s"),
-					optionsTotal / m_dialToneSampleCount, audioTotal / m_dialToneSampleCount,
-					m_dialToneSampleCount, m_dialToneSampleCount == 1 ? _T("") : _T("s"));
-				m_callTracePanel->Append(baseline);
-			}
-			else {
-				m_callTracePanel->Append(_T("Recent READY   first in-memory timing sample"));
-			}
 			m_dialToneOptionsSamples[m_dialToneSampleNext] = result->elapsed;
 			m_dialToneAudioSamples[m_dialToneSampleNext] = m_dialToneAudioMs;
 			m_dialToneSampleNext = (m_dialToneSampleNext + 1) % 5;
 			if (m_dialToneSampleCount < 5) ++m_dialToneSampleCount;
 			m_dialToneReadyTick = GetTickCount();
 			m_dialToneReadyAccount = account;
-			m_callTracePanel->Append(_T("Dial tone started"));
-			m_callTracePanel->Append(_T("Ready to dial."));
+			m_callTracePanel->Append(_T("Dial-Tone     READY · start dialling"));
 		}
 		else {
-			m_callTracePanel->Append(_T("Dial tone     NOT READY · ") + pj_error_text(toneStatus));
-			m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+			CString failure;
+			failure.Format(_T("Dial-Tone     NOT READY · %s failed · %s"),
+				MSIP::Utf8DecodeUni(dial_tone_error_stage()), pj_error_text(toneStatus));
+			m_callTracePanel->Append(failure);
 			SetDialToneSessionActive(false);
 		}
 	}
 	else if (state == 1) {
-		m_callTracePanel->Append(_T("Pre-call      DEGRADED · normal dial tone withheld"));
+		m_callTracePanel->Append(_T("Dial-Tone     DEGRADED · tone withheld"));
 		SetDialToneSessionActive(false);
 	}
 	else {
-		m_callTracePanel->Append(_T("Pre-call      NOT READY"));
+		m_callTracePanel->Append(_T("Dial-Tone     NOT READY"));
 		SetDialToneSessionActive(false);
 	}
 	delete result;
