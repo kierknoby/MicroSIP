@@ -3,6 +3,7 @@
 #include "CListCtrl_Sortable.h"
 #include "Resource.h"
 #include "mainDlg.h"
+#include "DarkPalette.h"
 
 #include <shlwapi.h>
 #include <uxtheme.h>
@@ -46,9 +47,9 @@ void CDarkHeaderCtrl::OnCustomDraw(NMHDR* pNMHDR, LRESULT* pResult)
 		return;
 	}
 	CRect rect = draw->rc;
-	dc->FillSolidRect(&rect, (draw->uItemState & CDIS_SELECTED) ? RGB(59, 68, 77) : RGB(43, 48, 54));
-	dc->FillSolidRect(rect.right - 1, rect.top, 1, rect.Height(), RGB(71, 78, 86));
-	dc->FillSolidRect(rect.left, rect.bottom - 1, rect.Width(), 1, RGB(71, 78, 86));
+	dc->FillSolidRect(&rect, (draw->uItemState & CDIS_SELECTED) ? DarkPalette::Selected() : DarkPalette::Surface());
+	dc->FillSolidRect(rect.right - 1, rect.top, 1, rect.Height(), DarkPalette::Border());
+	dc->FillSolidRect(rect.left, rect.bottom - 1, rect.Width(), 1, DarkPalette::Separator());
 	TCHAR text[256] = { 0 };
 	HDITEM item = { 0 };
 	item.mask = HDI_TEXT | HDI_FORMAT;
@@ -56,7 +57,7 @@ void CDarkHeaderCtrl::OnCustomDraw(NMHDR* pNMHDR, LRESULT* pResult)
 	item.cchTextMax = _countof(text);
 	if (GetItem((int)draw->dwItemSpec, &item)) {
 		int oldMode = dc->SetBkMode(TRANSPARENT);
-		COLORREF oldColor = dc->SetTextColor(RGB(235, 238, 241));
+		COLORREF oldColor = dc->SetTextColor(DarkPalette::Text());
 		CFont* oldFont = dc->SelectObject(GetFont());
 		rect.DeflateRect(4, 0);
 		UINT format = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
@@ -74,9 +75,9 @@ void CListCtrl_Sortable::SetDarkMode(bool enabled)
 	if (!::IsWindow(m_hWnd)) {
 		return;
 	}
-	SetBkColor(enabled ? RGB(30, 34, 38) : GetSysColor(COLOR_WINDOW));
-	SetTextBkColor(enabled ? RGB(30, 34, 38) : GetSysColor(COLOR_WINDOW));
-	SetTextColor(enabled ? RGB(235, 238, 241) : GetSysColor(COLOR_WINDOWTEXT));
+	SetBkColor(enabled ? DarkPalette::Window() : GetSysColor(COLOR_WINDOW));
+	SetTextBkColor(enabled ? DarkPalette::Window() : GetSysColor(COLOR_WINDOW));
+	SetTextColor(enabled ? DarkPalette::Text() : GetSysColor(COLOR_WINDOWTEXT));
 	EnableWindowThemeDark(m_hWnd, enabled);
 	CHeaderCtrl* header = GetHeaderCtrl();
 	if (header && ::IsWindow(header->m_hWnd)) {

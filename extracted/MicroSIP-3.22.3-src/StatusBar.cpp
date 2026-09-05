@@ -20,6 +20,7 @@
 #include "StatusBar.h"   
 #include "global.h"
 #include "settings.h"
+#include "DarkPalette.h"
 
  // StatusBar   
 IMPLEMENT_DYNAMIC(StatusBar, CStatusBar)
@@ -51,10 +52,10 @@ void StatusBar::OnPaint()
 	CPaintDC dc(this);
 	CRect client;
 	GetClientRect(&client);
-	dc.FillSolidRect(client, RGB(30, 34, 38));
-	dc.FillSolidRect(client.left, client.top, client.Width(), 1, RGB(71, 78, 86));
+	dc.FillSolidRect(client, DarkPalette::Window());
+	dc.FillSolidRect(client.left, client.top, client.Width(), 1, DarkPalette::Separator());
 	int oldMode = dc.SetBkMode(TRANSPARENT);
-	COLORREF oldColor = dc.SetTextColor(RGB(235, 238, 241));
+	COLORREF oldColor = dc.SetTextColor(DarkPalette::Text());
 	CFont* oldFont = dc.SelectObject(GetFont());
 	CStatusBarCtrl& control = GetStatusBarCtrl();
 	for (int i = 0; i < m_nCount; i++) {
@@ -64,6 +65,7 @@ void StatusBar::OnPaint()
 			continue;
 		}
 		rect.DeflateRect(2, 0);
+		if (i) dc.FillSolidRect(rect.left - 2, rect.top, 1, rect.Height(), DarkPalette::Separator());
 		HICON icon = control.GetIcon(i);
 		if (icon) {
 			int size = GetSystemMetrics(SM_CXSMICON);

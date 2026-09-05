@@ -18,6 +18,7 @@
 
 #include "StdAfx.h"   
 #include "ButtonBottom.h"   
+#include "DarkPalette.h"
 
  // CButtonBottom   
 IMPLEMENT_DYNAMIC(CButtonBottom, CMFCButton)
@@ -42,11 +43,11 @@ CButtonBottom::~CButtonBottom()
 void CButtonBottom::SetDarkMode(bool enabled)
 {
 	if (enabled) {
-		m_clrButton = RGB(43, 48, 54);
-		m_clrButtonHover = RGB(59, 68, 77);
-		m_clrButtonPushed = RGB(45, 112, 166);
-		m_clrButtonText = RGB(235, 238, 241);
-		m_clrButtonTextPushed = RGB(255, 255, 255);
+		m_clrButton = DarkPalette::Surface();
+		m_clrButtonHover = DarkPalette::Active();
+		m_clrButtonPushed = DarkPalette::Selected();
+		m_clrButtonText = DarkPalette::Text();
+		m_clrButtonTextPushed = DarkPalette::Text();
 	}
 	else {
 		m_clrButton = RGB(255, 255, 255);

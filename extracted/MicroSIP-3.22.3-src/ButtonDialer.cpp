@@ -22,6 +22,7 @@
 #include "const.h"
 #include "global.h"
 #include "settings.h"
+#include "DarkPalette.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // CButtonDialer
@@ -118,7 +119,7 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	CRect rt;
 	rt = lpDrawItemStruct->rcItem;		//Get button rect
 	if (accountSettings.darkMode) {
-		dc.FillSolidRect(rt, RGB(43, 48, 54));
+		dc.FillSolidRect(rt, DarkPalette::Surface());
 	}
 	else {
 		dc.FillSolidRect(rt, dc.GetBkColor());
@@ -129,9 +130,9 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	UINT state = lpDrawItemStruct->itemState;	//Get state of the button
 
 	if (accountSettings.darkMode) {
-		COLORREF background = (state & ODS_SELECTED) ? RGB(45, 112, 166) : RGB(43, 48, 54);
+		COLORREF background = (state & ODS_SELECTED) ? DarkPalette::Selected() : (GetCapture() == this ? DarkPalette::Active() : DarkPalette::Surface());
 		dc.FillSolidRect(rt, background);
-		dc.Draw3dRect(rt, RGB(71, 78, 86), RGB(24, 28, 32));
+		dc.Draw3dRect(rt, DarkPalette::Border(), DarkPalette::Separator());
 	}
 	else if (!m_hTheme) {
 		UINT uStyle = DFCS_BUTTONPUSH;
@@ -171,7 +172,7 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 		// Do your text drawing
 		rtl.left += x12;
 		rtl.right -= x4;
-		crOldColor = dc.SetTextColor(accountSettings.darkMode ? RGB(180, 188, 196) : RGB(127, 127, 127));
+		crOldColor = dc.SetTextColor(accountSettings.darkMode ? DarkPalette::SecondaryText() : RGB(127, 127, 127));
 		dc.DrawText(letters, rtl, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		dc.SetTextColor(crOldColor);
 		// Always select the old font back into the DC
@@ -179,10 +180,10 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	}
 	else {
 		if (forceNumeric) {
-			crOldColor = dc.SetTextColor(accountSettings.darkMode ? RGB(235, 238, 241) : RGB(80, 80, 80));
+			crOldColor = dc.SetTextColor(accountSettings.darkMode ? DarkPalette::Text() : RGB(80, 80, 80));
 		}
 		else {
-			crOldColor = dc.SetTextColor(accountSettings.darkMode ? RGB(210, 216, 222) : RGB(127, 127, 127));
+			crOldColor = dc.SetTextColor(accountSettings.darkMode ? DarkPalette::Text() : RGB(127, 127, 127));
 		}
 		dc.DrawText(strTemp, rt, DT_CENTER | DT_VCENTER | DT_SINGLELINE);		// Draw out the caption
 		dc.SetTextColor(crOldColor);

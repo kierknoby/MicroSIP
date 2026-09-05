@@ -29,6 +29,7 @@
 #include "afxinet.h"
 #include "MessageBoxX.h"
 #include <uxtheme.h>
+#include "DarkPalette.h"
 
 static UINT_PTR blinkTimer = NULL;
 static bool blinkState = false;
@@ -86,14 +87,14 @@ HBRUSH Contacts::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 {
 	if (accountSettings.darkMode
 		&& (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
-		static CBrush darkDialogBrush(RGB(30, 34, 38));
-		static CBrush darkEditBrush(RGB(43, 48, 54));
-		pDC->SetTextColor(RGB(235, 238, 241));
+		static CBrush darkDialogBrush(DarkPalette::Window());
+		static CBrush darkEditBrush(DarkPalette::Input());
+		pDC->SetTextColor(DarkPalette::Text());
 		if (nCtlColor == CTLCOLOR_EDIT) {
-			pDC->SetBkColor(RGB(43, 48, 54));
+			pDC->SetBkColor(DarkPalette::Input());
 			return darkEditBrush;
 		}
-		pDC->SetBkColor(RGB(30, 34, 38));
+		pDC->SetBkColor(DarkPalette::Window());
 		return darkDialogBrush;
 	}
 	return CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);

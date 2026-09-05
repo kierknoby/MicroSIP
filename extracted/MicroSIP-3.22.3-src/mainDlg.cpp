@@ -44,6 +44,8 @@
 #include <locale.h> 
 #include <Wtsapi32.h>
 #include "atlrx.h"
+#include "StdioFileEx.h"
+#include "DarkPalette.h"
 
 #include "afxvisualmanager.h"
 #include "afxvisualmanagerwindows.h"
@@ -109,7 +111,7 @@ protected:
 		CRect client;
 		GetClientRect(&client);
 		Gdiplus::Graphics graphics(dc.m_hDC);
-		COLORREF background = accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE);
+		COLORREF background = accountSettings.darkMode ? DarkPalette::Window() : GetSysColor(COLOR_3DFACE);
 		graphics.Clear(Gdiplus::Color(255, GetRValue(background), GetGValue(background), GetBValue(background)));
 		if (!image) {
 			return;
@@ -222,28 +224,53 @@ public:
 		heading.Create(Translate(_T("Call Trace")), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
 			CRect(0, 0, 0, 0), this);
 		heading.SetFont(&headingFont);
+		traceMode.Create(Translate(_T("Call Trace")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTORADIOBUTTON | BS_PUSHLIKE,
+			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_MODE);
+		notesMode.Create(Translate(_T("Call Notes")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTORADIOBUTTON | BS_PUSHLIKE,
+			CRect(0, 0, 0, 0), this, IDC_CALL_NOTES_MODE);
+		current.Create(Translate(_T("Current")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_CURRENT);
+		recent.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_RECENT);
+		save.Create(Translate(_T("Save")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_SAVE);
 		clear.Create(Translate(_T("Clear")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_CLEAR);
+		traceMode.SetFont(parent->GetFont());
+		notesMode.SetFont(parent->GetFont());
+		current.SetFont(parent->GetFont());
+		recent.SetFont(parent->GetFont());
+		save.SetFont(parent->GetFont());
 		clear.SetFont(parent->GetFont());
 		log.Create(WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_READONLY
 			| ES_AUTOVSCROLL | ES_LEFT, CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_LOG);
 		log.SetFont(&logFont);
+		notes.Create(WS_CHILD | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_LEFT,
+			CRect(0, 0, 0, 0), this, IDC_CALL_NOTES_MODE);
+		notes.SetFont(&logFont);
+		traceMode.SetCheck(BST_CHECKED);
+		mode = 0;
+		viewingCurrent = true;
 		Reset();
+		RefreshRecent();
 		return true;
 	}
 
 	void Reset()
 	{
+		ResetPresentation();
 		lineCount = 0;
-		if (::IsWindow(log.m_hWnd)) {
+		currentTrace.Empty();
+		if (::IsWindow(log.m_hWnd) && mode == 0 && viewingCurrent) {
 			log.SetWindowText(Translate(_T("No active call")));
 		}
 	}
 
 	void Clear()
 	{
+		ResetPresentation();
 		lineCount = 0;
-		if (::IsWindow(log.m_hWnd)) {
+		currentTrace.Empty();
+		if (::IsWindow(log.m_hWnd) && mode == 0 && viewingCurrent) {
 			log.SetWindowText(_T(""));
 		}
 	}
@@ -253,34 +280,208 @@ public:
 		if (!::IsWindow(log.m_hWnd)) {
 			return;
 		}
-		if (!lineCount) {
-			log.SetWindowText(_T(""));
-		}
-		bool follow = IsScrolledToBottom();
-		int firstVisible = log.GetFirstVisibleLine();
-
-		CTime now = CTime::GetCurrentTime();
+		SYSTEMTIME now;
+		GetLocalTime(&now);
 		CString line;
-		line.Format(_T("%s%s  %s"), lineCount ? _T("\r\n") : _T(""), now.Format(_T("%H:%M:%S")), text);
-
-		int length = log.GetWindowTextLength();
-		log.SetSel(length, length);
-		log.ReplaceSel(line);
+		line.Format(_T("%s%02d:%02d:%02d.%03d  %s"), lineCount ? _T("\r\n") : _T(""),
+			now.wHour, now.wMinute, now.wSecond, now.wMilliseconds, text);
+		currentTrace += line;
 		lineCount++;
 		TrimHistory();
-
+		if (mode != 0 || !viewingCurrent) {
+			return;
+		}
+		bool follow = IsScrolledToBottom();
+		POINT original = GetScrollPosition();
+		AppendVisibleLine(line, text.GetLength());
 		if (follow) {
-			log.LineScroll(log.GetLineCount());
+			log.SetSel(log.GetWindowTextLength(), log.GetWindowTextLength());
+			log.SendMessage(EM_SCROLLCARET);
+			m_scrollTarget = GetScrollPosition();
+			SetScrollPosition(original);
+			StartScrollAnimation();
+		}
+	}
+
+	bool BeginCall(pjsua_call_info* callInfo)
+	{
+		if (!callInfo || callInfo->id == metadata.callId) {
+			return true;
+		}
+		if (mode == 1 && viewingCurrent) {
+			currentNotes = GetText(notes);
+		}
+		if (!currentNotes.IsEmpty() && currentNotes != savedCurrentNotes && !PromptDiscardNotes()) {
+			return false;
+		}
+		metadata.callId = callInfo->id;
+		metadata.started = CTime::GetCurrentTime();
+		metadata.finalDuration = -1;
+		metadata.active = true;
+		metadata.username = accountSettings.account.username;
+		metadata.sipCallId = CString(callInfo->call_id.ptr, callInfo->call_id.slen);
+		metadata.callerId = CallerFromUri(CString(callInfo->remote_info.ptr, callInfo->remote_info.slen));
+		if (metadata.callerId.IsEmpty()) {
+			metadata.callerId = _T("Unknown");
+		}
+		currentNotes.Empty();
+		savedCurrentNotes.Empty();
+		notes.SetWindowText(_T(""));
+		Clear();
+		ShowCurrent();
+		return true;
+	}
+
+	void EndCall(pjsua_call_info* callInfo)
+	{
+		if (callInfo && callInfo->id == metadata.callId && metadata.active) {
+			metadata.finalDuration = max(0, (int)(CTime::GetCurrentTime() - metadata.started).GetTotalSeconds());
+			metadata.active = false;
+		}
+	}
+
+	void ShowMode(int newMode)
+	{
+		CString notesToSave = currentNotes;
+		if (mode == 1) {
+			notesToSave = GetText(notes);
+			if (viewingCurrent) currentNotes = notesToSave;
+		}
+		mode = newMode;
+		viewingCurrent = true;
+		traceMode.SetCheck(mode == 0 ? BST_CHECKED : BST_UNCHECKED);
+		notesMode.SetCheck(mode == 1 ? BST_CHECKED : BST_UNCHECKED);
+		heading.SetWindowText(mode == 0 ? Translate(_T("Call Trace")) : Translate(_T("Call Notes")));
+		ShowCurrent();
+		RefreshRecent();
+	}
+
+	void ShowCurrent()
+	{
+		viewingCurrent = true;
+		current.EnableWindow(TRUE);
+		if (mode == 0) {
+			log.SetWindowText(currentTrace.IsEmpty() && metadata.callId == PJSUA_INVALID_ID ? Translate(_T("No active call")) : currentTrace);
+			FormatTraceTimestamps();
+			log.ShowWindow(SW_SHOW);
+			notes.ShowWindow(SW_HIDE);
 		}
 		else {
-			log.LineScroll(firstVisible - log.GetFirstVisibleLine());
+			notes.SetWindowText(currentNotes);
+			log.ShowWindow(SW_HIDE);
+			notes.ShowWindow(SW_SHOW);
 		}
+	}
+
+	void RefreshRecent()
+	{
+		recent.ResetContent();
+		recentPaths.RemoveAll();
+		CString folder = SaveFolder();
+		CString pattern = folder + _T("\\*-") + (mode == 0 ? _T("Trace-") : _T("Note-")) + _T("*.txt");
+		CFileFind finder;
+		BOOL found = finder.FindFile(pattern);
+		CArray<CString, CString&> paths;
+		while (found) {
+			found = finder.FindNextFile();
+			if (!finder.IsDots() && !finder.IsDirectory()) {
+				paths.Add(finder.GetFilePath());
+			}
+		}
+		for (int i = 0; i < paths.GetCount(); i++) {
+			for (int j = i + 1; j < paths.GetCount(); j++) {
+				if (SaveTimeFromPath(paths[j]) > SaveTimeFromPath(paths[i])) {
+					CString swap = paths[i]; paths[i] = paths[j]; paths[j] = swap;
+				}
+			}
+		}
+		for (int i = 0; i < paths.GetCount() && i < 5; i++) {
+			CString fileName = paths[i].Mid(paths[i].ReverseFind('\\') + 1);
+			recent.AddString(fileName);
+			recentPaths.Add(paths[i]);
+		}
+	}
+
+	void LoadRecent()
+	{
+		int selection = recent.GetCurSel();
+		if (selection == CB_ERR || selection >= recentPaths.GetCount()) {
+			return;
+		}
+		CStdioFileEx file;
+		file.SetCodePage(CP_UTF8);
+		CString text;
+		if (!file.Open(recentPaths[selection], CFile::modeRead | CFile::typeText) || !file.ReadString(text)) {
+			return;
+		}
+		CString all = text;
+		while (file.ReadString(text)) {
+			all += _T("\r\n") + text;
+		}
+		file.Close();
+		viewingCurrent = false;
+		if (mode == 0) {
+			log.SetWindowText(all);
+			FormatTraceTimestamps();
+		}
+		else {
+			notes.SetWindowText(all);
+		}
+	}
+
+	void Save()
+	{
+		CString notesToSave = currentNotes;
+		if (mode == 1 && viewingCurrent) {
+			currentNotes = GetText(notes);
+			notesToSave = currentNotes;
+		}
+		else if (mode == 1 && !viewingCurrent) {
+			notesToSave = GetText(notes);
+		}
+		CString folder = SaveFolder();
+		if (!EnsureFolder(folder)) {
+			AfxMessageBox(Translate(_T("Unable to create the Call Records folder.")), MB_ICONERROR);
+			return;
+		}
+		CString caller = SafeFilePart(metadata.callerId.IsEmpty() ? _T("Unknown") : metadata.callerId);
+		CString username = SafeFilePart(metadata.username.IsEmpty() ? _T("Unknown") : metadata.username);
+		CTime started = metadata.started.GetTime() ? metadata.started : CTime::GetCurrentTime();
+		int duration = metadata.finalDuration >= 0 ? metadata.finalDuration : (metadata.active ? max(0, (int)(CTime::GetCurrentTime() - started).GetTotalSeconds()) : 0);
+		ULONGLONG saveTime = UnixMilliseconds();
+		CString fileName;
+		fileName.Format(_T("%s-%s-%dS-%s-%s-%I64u.txt"), caller, started.Format(_T("%Y-%m-%d-%H%M%S")), duration,
+			username, mode == 0 ? _T("Trace") : _T("Note"), saveTime);
+		CString body;
+		body.Format(_T("Caller ID: %s\r\nStarted: %s\r\nDuration: %d\r\nUsername: %s\r\nSIP Call-ID: %s\r\n\r\n%s:\r\n%s\r\n"),
+			metadata.callerId, started.Format(_T("%Y-%m-%d %H:%M:%S")), duration, metadata.username, metadata.sipCallId,
+			mode == 0 ? _T("Trace") : _T("Notes"), mode == 0 ? currentTrace : notesToSave);
+		CStdioFileEx file;
+		file.SetCodePage(CP_UTF8);
+		file.SetWriteBOM(true);
+		CFileException error;
+		if (!file.Open(folder + _T("\\") + fileName, CFile::modeCreate | CFile::modeWrite | CFile::typeText, &error)) {
+			AfxMessageBox(Translate(_T("Unable to save the call record.")), MB_ICONERROR);
+			return;
+		}
+		file.WriteString(body);
+		file.Close();
+		if (mode == 1 && viewingCurrent) {
+			savedCurrentNotes = currentNotes;
+		}
+		RefreshRecent();
 	}
 
 	void SetDarkMode(bool enabled)
 	{
 		darkMode = enabled;
 		SetWindowTheme(log.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(notes.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(traceMode.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(notesMode.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(current.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(recent.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
+		SetWindowTheme(save.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
 		SetWindowTheme(clear.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
 		clear.Invalidate();
 		log.Invalidate();
@@ -296,13 +497,23 @@ public:
 		GetClientRect(&client);
 		int pad = MulDiv(4, dpiY, 96);
 		int headerHeight = MulDiv(18, dpiY, 96);
-		int clearWidth = MulDiv(52, dpiY, 96);
-		heading.SetWindowPos(NULL, pad, pad, client.Width() - clearWidth - pad * 3, headerHeight,
+		int buttonWidth = MulDiv(48, dpiY, 96);
+		int modeWidth = MulDiv(62, dpiY, 96);
+		traceMode.SetWindowPos(NULL, pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		notesMode.SetWindowPos(NULL, pad + modeWidth + pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		heading.SetWindowPos(NULL, pad + modeWidth * 2 + pad * 3, pad, client.Width() - modeWidth * 2 - buttonWidth * 2 - pad * 7, headerHeight,
 			SWP_NOACTIVATE | SWP_NOZORDER);
-		clear.SetWindowPos(NULL, client.right - clearWidth - pad, pad, clearWidth, headerHeight,
+		save.SetWindowPos(NULL, client.right - buttonWidth * 2 - pad * 3, pad, buttonWidth, headerHeight,
 			SWP_NOACTIVATE | SWP_NOZORDER);
-		int logTop = pad * 2 + headerHeight;
+		clear.SetWindowPos(NULL, client.right - buttonWidth - pad, pad, buttonWidth, headerHeight,
+			SWP_NOACTIVATE | SWP_NOZORDER);
+		int recentTop = pad * 2 + headerHeight;
+		current.SetWindowPos(NULL, pad, recentTop, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		recent.SetWindowPos(NULL, pad + modeWidth + pad, recentTop, client.Width() - modeWidth - pad * 3, MulDiv(120, dpiY, 96), SWP_NOACTIVATE | SWP_NOZORDER);
+		int logTop = recentTop + headerHeight + pad;
 		log.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, max(0, client.bottom - logTop - pad),
+			SWP_NOACTIVATE | SWP_NOZORDER);
+		notes.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, max(0, client.bottom - logTop - pad),
 			SWP_NOACTIVATE | SWP_NOZORDER);
 	}
 
@@ -311,22 +522,22 @@ protected:
 	{
 		CRect rect;
 		GetClientRect(&rect);
-		dc->FillSolidRect(rect, darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
+		dc->FillSolidRect(rect, darkMode ? DarkPalette::Window() : GetSysColor(COLOR_3DFACE));
 		return TRUE;
 	}
 	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd* child, UINT controlColor)
 	{
 		if (darkMode) {
-			static CBrush darkPanelBrush(RGB(30, 34, 38));
-			static CBrush darkEditBrush(RGB(43, 48, 54));
+			static CBrush darkPanelBrush(DarkPalette::Window());
+			static CBrush darkEditBrush(DarkPalette::Input());
 			if (controlColor == CTLCOLOR_EDIT || controlColor == CTLCOLOR_LISTBOX) {
-				dc->SetTextColor(RGB(235, 238, 241));
-				dc->SetBkColor(RGB(43, 48, 54));
+				dc->SetTextColor(DarkPalette::Text());
+				dc->SetBkColor(DarkPalette::Input());
 				return darkEditBrush;
 			}
 			if (controlColor == CTLCOLOR_STATIC || controlColor == CTLCOLOR_DLG) {
-				dc->SetTextColor(RGB(235, 238, 241));
-				dc->SetBkColor(RGB(30, 34, 38));
+				dc->SetTextColor(DarkPalette::Text());
+				dc->SetBkColor(DarkPalette::Window());
 				return darkPanelBrush;
 			}
 		}
@@ -337,13 +548,199 @@ protected:
 		CWnd::OnSize(type, cx, cy);
 		LayoutChildren();
 	}
+	afx_msg void OnTimer(UINT_PTR timerId)
+	{
+		if (timerId != IDT_CALL_TRACE_SCROLL) {
+			CWnd::OnTimer(timerId);
+			return;
+		}
+		if (mode != 0 || !viewingCurrent || !autoFollow) {
+			KillTimer(IDT_CALL_TRACE_SCROLL);
+			return;
+		}
+		POINT current = GetScrollPosition();
+		int remaining = m_scrollTarget.y - current.y;
+		if (abs(remaining) <= 1) {
+			SetScrollPosition(m_scrollTarget);
+			KillTimer(IDT_CALL_TRACE_SCROLL);
+			return;
+		}
+		current.y += remaining / 4;
+		if (current.y == m_scrollTarget.y) current.y += remaining > 0 ? 1 : -1;
+		SetScrollPosition(current);
+	}
 	afx_msg void OnClear()
 	{
-		Clear();
+		if (mode == 0 && viewingCurrent) Clear();
+		else if (mode == 1 && viewingCurrent) { currentNotes.Empty(); notes.SetWindowText(_T("")); }
+	}
+	afx_msg void OnTraceMode() { ShowMode(0); }
+	afx_msg void OnNotesMode() { ShowMode(1); }
+	afx_msg void OnCurrent() { ShowCurrent(); }
+	afx_msg void OnSave() { Save(); }
+	afx_msg void OnRecentChange() { LoadRecent(); }
+	afx_msg void OnTraceScroll()
+	{
+		if (programmaticScroll) return;
+		autoFollow = IsScrolledToBottom();
+		if (!autoFollow) KillTimer(IDT_CALL_TRACE_SCROLL);
 	}
 	DECLARE_MESSAGE_MAP()
 
 private:
+	enum { IDT_CALL_TRACE_SCROLL = 0x7F01, CALL_TRACE_SCROLL_FRAME_MS = 16 };
+
+	void ResetPresentation()
+	{
+		KillTimer(IDT_CALL_TRACE_SCROLL);
+		m_scrollTarget.x = 0;
+		m_scrollTarget.y = 0;
+		autoFollow = true;
+	}
+
+	POINT GetScrollPosition()
+	{
+		POINT point = { 0, 0 };
+		log.SendMessage(EM_GETSCROLLPOS, 0, (LPARAM)&point);
+		return point;
+	}
+
+	void SetScrollPosition(POINT point)
+	{
+		programmaticScroll = true;
+		log.SendMessage(EM_SETSCROLLPOS, 0, (LPARAM)&point);
+		programmaticScroll = false;
+	}
+
+	void StartScrollAnimation()
+	{
+		if (m_scrollTarget.y != GetScrollPosition().y) SetTimer(IDT_CALL_TRACE_SCROLL, CALL_TRACE_SCROLL_FRAME_MS, NULL);
+	}
+
+	void AppendVisibleLine(const CString& line, int eventLength)
+	{
+		if (lineCount == 1) log.SetWindowText(_T(""));
+		int length = log.GetWindowTextLength();
+		int timestampLength = line.GetLength() - eventLength;
+		log.SetSel(length, length);
+		CHARFORMAT2 timestamp = { sizeof(CHARFORMAT2) };
+		timestamp.dwMask = CFM_COLOR;
+		timestamp.crTextColor = darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120);
+		log.SetSelectionCharFormat(timestamp);
+		log.ReplaceSel(line.Left(timestampLength));
+		CHARFORMAT2 event = { sizeof(CHARFORMAT2) };
+		event.dwMask = CFM_COLOR;
+		event.crTextColor = darkMode ? DarkPalette::Text() : GetSysColor(COLOR_WINDOWTEXT);
+		log.SetSelectionCharFormat(event);
+		log.ReplaceSel(line.Mid(timestampLength));
+	}
+
+	void FormatTraceTimestamps()
+	{
+		CString text;
+		log.GetWindowText(text);
+		CHARFORMAT2 timestamp = { sizeof(CHARFORMAT2) };
+		timestamp.dwMask = CFM_COLOR;
+		timestamp.crTextColor = darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120);
+		int start = 0;
+		while (start < text.GetLength()) {
+			int end = text.Find(_T('\n'), start);
+			int length = (end == -1 ? text.GetLength() : end) - start;
+			if (length >= 14 && text.Mid(start + 2, 1) == _T(":") && text.Mid(start + 5, 1) == _T(":")) {
+				log.SetSel(start, start + 14);
+				log.SetSelectionCharFormat(timestamp);
+			}
+			if (end == -1) break;
+			start = end + 1;
+		}
+	}
+
+	struct CallMetadata {
+		pjsua_call_id callId = PJSUA_INVALID_ID;
+		CTime started;
+		int finalDuration = -1;
+		bool active = false;
+		CString callerId;
+		CString username;
+		CString sipCallId;
+	};
+
+	static CString GetText(CEdit& edit)
+	{
+		CString text;
+		edit.GetWindowText(text);
+		return text;
+	}
+
+	static CString CallerFromUri(CString uri)
+	{
+		int scheme = uri.Find(_T("sip:"));
+		if (scheme != -1) uri = uri.Mid(scheme + 4);
+		int end = uri.FindOneOf(_T("@;>"));
+		return end == -1 ? uri : uri.Left(end);
+	}
+
+	static ULONGLONG SaveTimeFromPath(CString path)
+	{
+		int dot = path.ReverseFind(_T('.'));
+		int dash = path.ReverseFind(_T('-'));
+		if (dash == -1 || dot <= dash) return 0;
+		return _ttoi64(path.Mid(dash + 1, dot - dash - 1));
+	}
+
+	static CString SafeFilePart(CString part)
+	{
+		part.Trim();
+		for (int i = 0; i < part.GetLength(); i++) {
+			if (part[i] < 32 || _tcschr(_T("\\/:*?\"<>|"), part[i])) part.SetAt(i, _T('_'));
+		}
+		part.Trim(_T(". "));
+		return part.IsEmpty() ? _T("Unknown") : part;
+	}
+
+	static CString SaveFolder()
+	{
+		CString folder = accountSettings.appDataRoaming;
+		folder.TrimRight(_T("\\"));
+		return folder + _T("\\freepbxUK\\CallRecords");
+	}
+
+	static bool EnsureFolder(CString folder)
+	{
+		int position = 0;
+		while ((position = folder.Find(_T('\\'), position)) != -1) {
+			CString partial = folder.Left(position++);
+			if (partial.GetLength() > 2 && !CreateDirectory(partial, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) return false;
+		}
+		return CreateDirectory(folder, NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
+	}
+
+	static ULONGLONG UnixMilliseconds()
+	{
+		FILETIME fileTime;
+		GetSystemTimeAsFileTime(&fileTime);
+		ULARGE_INTEGER value;
+		value.LowPart = fileTime.dwLowDateTime;
+		value.HighPart = fileTime.dwHighDateTime;
+		return (value.QuadPart - 116444736000000000ULL) / 10000;
+	}
+
+	bool PromptDiscardNotes()
+	{
+		int result = AfxMessageBox(Translate(_T("Save notes for the previous call?")), MB_YESNOCANCEL | MB_ICONQUESTION);
+		if (result == IDCANCEL) return false;
+		if (result == IDYES) {
+			int previousMode = mode;
+			bool previousCurrent = viewingCurrent;
+			mode = 1;
+			viewingCurrent = true;
+			Save();
+			mode = previousMode;
+			viewingCurrent = previousCurrent;
+		}
+		return true;
+	}
+
 	bool IsScrolledToBottom()
 	{
 		CRect rect;
@@ -372,30 +769,60 @@ private:
 			return;
 		}
 		int drop = lineCount - maxLines;
-		int charIndex = log.LineIndex(drop);
-		if (charIndex <= 0) {
+		int charIndex = 0;
+		while (drop-- > 0) {
+			charIndex = currentTrace.Find(_T('\n'), charIndex);
+			if (charIndex == -1) {
+				currentTrace.Empty();
+				lineCount = 0;
+				return;
+			}
+			charIndex++;
+		}
+		if (!charIndex) {
 			return;
 		}
-		CString text;
-		log.GetWindowText(text);
-		log.SetWindowText(text.Mid(charIndex));
+		currentTrace = currentTrace.Mid(charIndex);
 		lineCount = maxLines;
 	}
 
 	CStatic heading;
+	CButton traceMode;
+	CButton notesMode;
+	CButton current;
+	CComboBox recent;
+	CButton save;
 	CButton clear;
-	CEdit log;
+	CRichEditCtrl log;
+	CEdit notes;
 	CFont logFont;
 	CFont headingFont;
 	int lineCount;
 	bool darkMode = false;
+	int mode;
+	bool viewingCurrent;
+	CString currentTrace;
+	CString currentNotes;
+	CString savedCurrentNotes;
+	CArray<CString, CString&> recentPaths;
+	POINT m_scrollTarget = { 0, 0 };
+	bool autoFollow = true;
+	bool programmaticScroll = false;
+	CallMetadata metadata;
 };
 
 BEGIN_MESSAGE_MAP(CmainDlg::CCallTracePanel, CWnd)
 	ON_WM_ERASEBKGND()
 	ON_WM_CTLCOLOR()
 	ON_WM_SIZE()
+	ON_WM_TIMER()
 	ON_BN_CLICKED(IDC_CALL_TRACE_CLEAR, OnClear)
+	ON_BN_CLICKED(IDC_CALL_TRACE_MODE, OnTraceMode)
+	ON_BN_CLICKED(IDC_CALL_NOTES_MODE, OnNotesMode)
+	ON_BN_CLICKED(IDC_CALL_RECORD_CURRENT, OnCurrent)
+	ON_BN_CLICKED(IDC_CALL_RECORD_SAVE, OnSave)
+	ON_CBN_SELCHANGE(IDC_CALL_RECORD_RECENT, OnRecentChange)
+	ON_EN_VSCROLL(IDC_CALL_TRACE_LOG, OnTraceScroll)
 END_MESSAGE_MAP()
 
 CmainDlg* mainDlg;
@@ -2775,7 +3202,7 @@ void CmainDlg::ApplyDarkMode()
 	SetWindowTheme(m_ButtonMenu.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
 	SetWindowTheme(m_bar.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
 	CStatusBarCtrl& statusctrl = m_bar.GetStatusBarCtrl();
-	statusctrl.SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : GetSysColor(COLOR_3DFACE));
+	statusctrl.SetBkColor(accountSettings.darkMode ? DarkPalette::Window() : GetSysColor(COLOR_3DFACE));
 	if (pageDialer) {
 		pageDialer->SetDarkMode(accountSettings.darkMode);
 	}
@@ -2786,7 +3213,7 @@ void CmainDlg::ApplyDarkMode()
 		pageContacts->SetDarkMode(accountSettings.darkMode);
 	}
 	if (imageListStatus) {
-		imageListStatus->SetBkColor(accountSettings.darkMode ? RGB(30, 34, 38) : RGB(255, 255, 255));
+		imageListStatus->SetBkColor(accountSettings.darkMode ? DarkPalette::Window() : RGB(255, 255, 255));
 	}
 	if (m_freepbxFooter) {
 		m_freepbxFooter->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
@@ -2810,6 +3237,9 @@ void CmainDlg::OnMenuDarkMode()
 void CmainDlg::CallTraceOnCallState(pjsua_call_info* call_info)
 {
 	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !call_info) {
+		return;
+	}
+	if (!m_callTracePanel->BeginCall(call_info)) {
 		return;
 	}
 	CString line;
@@ -2841,6 +3271,7 @@ void CmainDlg::CallTraceOnCallState(pjsua_call_info* call_info)
 		line.Format(_T("SIP status: %d / %s"), call_info->last_status,
 			CString(call_info->last_status_text.ptr, call_info->last_status_text.slen));
 		m_callTracePanel->Append(line);
+		m_callTracePanel->EndCall(call_info);
 	}
 }
 
@@ -5513,9 +5944,9 @@ void CmainDlg::OnClose()
 HBRUSH CmainDlg::OnCtlColor(CDC * pDC, CWnd * pWnd, UINT nCtlColor)
 {
 	if (accountSettings.darkMode && (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
-		static CBrush darkBrush(RGB(30, 34, 38));
-		pDC->SetTextColor(RGB(235, 238, 241));
-		pDC->SetBkColor(RGB(30, 34, 38));
+		static CBrush darkBrush(DarkPalette::Window());
+		pDC->SetTextColor(DarkPalette::Text());
+		pDC->SetBkColor(DarkPalette::Window());
 		return darkBrush;
 	}
 	HBRUSH br = CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);

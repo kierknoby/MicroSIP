@@ -20,6 +20,7 @@
 #include "ButtonEx.h"   
 #include "global.h"
 #include "settings.h"
+#include "DarkPalette.h"
 
 // CButtonEx   
 IMPLEMENT_DYNAMIC(CButtonEx, CMFCButton)
@@ -52,8 +53,8 @@ BOOL CButtonEx::EnableWindow(BOOL bEnable)
 	}
 	else {
 		if (accountSettings.darkMode) {
-			SetTextColor(RGB(165, 172, 180));
-			SetFaceColor(RGB(43, 48, 54), true);
+			SetTextColor(DarkPalette::DisabledText());
+			SetFaceColor(DarkPalette::Surface(), true);
 		}
 		else {
 			SetTextColor(RGB(0, 0, 0));

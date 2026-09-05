@@ -28,6 +28,7 @@
 #include "CSVFile.h"
 #include "Markup.h"
 #include <uxtheme.h>
+#include "DarkPalette.h"
 
 enum {
 	MSIP_CALLS_COL_NAME,
@@ -103,14 +104,14 @@ HBRUSH Calls::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 {
 	if (accountSettings.darkMode
 		&& (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
-		static CBrush darkDialogBrush(RGB(30, 34, 38));
-		static CBrush darkEditBrush(RGB(43, 48, 54));
-		pDC->SetTextColor(RGB(235, 238, 241));
+		static CBrush darkDialogBrush(DarkPalette::Window());
+		static CBrush darkEditBrush(DarkPalette::Input());
+		pDC->SetTextColor(DarkPalette::Text());
 		if (nCtlColor == CTLCOLOR_EDIT) {
-			pDC->SetBkColor(RGB(43, 48, 54));
+			pDC->SetBkColor(DarkPalette::Input());
 			return darkEditBrush;
 		}
-		pDC->SetBkColor(RGB(30, 34, 38));
+		pDC->SetBkColor(DarkPalette::Window());
 		return darkDialogBrush;
 	}
 	return CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);
@@ -123,7 +124,7 @@ void Calls::SetDarkMode(bool enabled)
 	}
 	m_SortItemsExListCtrl.SetDarkMode(enabled);
 	if (imageList) {
-		imageList->SetBkColor(enabled ? RGB(30, 34, 38) : RGB(255, 255, 255));
+		imageList->SetBkColor(enabled ? DarkPalette::Window() : RGB(255, 255, 255));
 	}
 	CWnd* edit = GetDlgItem(IDC_FILER_VALUE);
 	if (edit) {

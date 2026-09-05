@@ -27,6 +27,7 @@
 #include "langpack.h"
 #include "Hid.h"
 #include "ButtonSafe.h"
+#include "DarkPalette.h"
 
 static CString digitsDTMFDelayed;
 
@@ -1015,9 +1016,9 @@ void Dialer::UpdateAccountIdentity()
 
 void Dialer::SetDarkMode(bool enabled)
 {
-	m_ButtonCall.m_FaceColor = enabled ? RGB(43, 48, 54) : _GLOBAL_DIALER_CALL_COLOR;
+			m_ButtonCall.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
 	m_ButtonCall.m_TextColor = RGB(255, 255, 255);
-	m_ButtonEnd.m_FaceColor = enabled ? RGB(43, 48, 54) : _GLOBAL_DIALER_END_COLOR;
+	m_ButtonEnd.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_END_COLOR;
 	m_ButtonEnd.m_TextColor = RGB(255, 255, 255);
 	m_ButtonDND.SetDarkMode(enabled);
 	m_ButtonFWD.SetDarkMode(enabled);
@@ -1304,10 +1305,15 @@ BOOL Dialer::PreTranslateMessage(MSG* pMsg)
 HBRUSH Dialer::OnCtlColor(CDC* pDC, CWnd *pWnd, UINT nCtlColor)
 {
 	if (accountSettings.darkMode && (nCtlColor == CTLCOLOR_DLG || nCtlColor == CTLCOLOR_STATIC || nCtlColor == CTLCOLOR_EDIT)) {
-		static CBrush darkBrush(RGB(30, 34, 38));
-		pDC->SetTextColor(RGB(235, 238, 241));
-		pDC->SetBkColor(RGB(30, 34, 38));
-		return darkBrush;
+		static CBrush darkPageBrush(DarkPalette::Window());
+		static CBrush darkInputBrush(DarkPalette::Input());
+		pDC->SetTextColor(DarkPalette::Text());
+		if (nCtlColor == CTLCOLOR_EDIT) {
+			pDC->SetBkColor(DarkPalette::Input());
+			return darkInputBrush;
+		}
+		pDC->SetBkColor(DarkPalette::Window());
+		return darkPageBrush;
 	}
 	HBRUSH br = CBaseDialog::OnCtlColor(pDC, pWnd, nCtlColor);
 	if (pWnd == &m_ButtonMinusInput
