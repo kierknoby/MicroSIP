@@ -932,6 +932,10 @@ struct DialToneOptionsToken
 	HWND window;
 	unsigned generation;
 	DWORD started;
+	pj_pool_t* pool;
+	pjsip_auth_clt_sess authSession;
+	bool authInitialized;
+	unsigned authRetries;
 };
 
 struct DialToneOptionsResult
@@ -943,6 +947,7 @@ struct DialToneOptionsResult
 	CString responseSource;
 	CString localAddress;
 	CString activeTransport;
+	bool authenticationFailed;
 };
 
 static CString pj_error_text(pj_status_t status)
@@ -970,20 +975,58 @@ static CString sip_target_for_trace(CString target)
 	return target;
 }
 
-static void on_acc_send_request(pjsua_acc_id, void* token, pjsip_event* event)
+static void destroy_dial_tone_options_token(DialToneOptionsToken* request)
+{
+	if (!request) {
+		return;
+	}
+	if (request->authInitialized) {
+		pjsip_auth_clt_deinit(&request->authSession);
+	}
+	if (request->pool) {
+		pj_pool_release(request->pool);
+	}
+	delete request;
+}
+
+static void on_dial_tone_options_request(void* token, pjsip_event* event)
 {
 	DialToneOptionsToken* request = (DialToneOptionsToken*)token;
 	if (!request) {
 		return;
 	}
+	pjsip_transaction* transaction = NULL;
+	pjsip_rx_data* response = NULL;
+	if (event && event->type == PJSIP_EVENT_TSX_STATE && event->body.tsx_state.tsx) {
+		transaction = event->body.tsx_state.tsx;
+		response = event->body.tsx_state.src.rdata;
+	}
+	if (transaction && response
+		&& (transaction->status_code == PJSIP_SC_UNAUTHORIZED
+			|| transaction->status_code == PJSIP_SC_PROXY_AUTHENTICATION_REQUIRED)
+		&& request->authInitialized && request->authRetries < 3 && transaction->last_tx) {
+		pjsip_tx_data* authenticatedRequest = NULL;
+		pj_status_t authStatus = pjsip_auth_clt_reinit_req(&request->authSession, response,
+			transaction->last_tx, &authenticatedRequest);
+		if (authStatus == PJ_SUCCESS && authenticatedRequest) {
+			request->authRetries++;
+			pj_status_t sendStatus = pjsip_endpt_send_request(pjsua_get_pjsip_endpt(),
+				authenticatedRequest, -1, request, &on_dial_tone_options_request);
+			if (sendStatus == PJ_SUCCESS) {
+				return;
+			}
+		}
+	}
 	DialToneOptionsResult* result = new DialToneOptionsResult();
 	result->generation = request->generation;
 	result->elapsed = GetTickCount() - request->started;
 	result->statusCode = 0;
-	if (event && event->type == PJSIP_EVENT_TSX_STATE && event->body.tsx_state.tsx) {
-		pjsip_transaction* transaction = event->body.tsx_state.tsx;
+	result->authenticationFailed = false;
+	if (transaction) {
 		result->statusCode = transaction->status_code;
 		result->statusText = MSIP::PjToStr(&transaction->status_text);
+		result->authenticationFailed = result->statusCode == PJSIP_SC_UNAUTHORIZED
+			|| result->statusCode == PJSIP_SC_PROXY_AUTHENTICATION_REQUIRED;
 		if (transaction->transport) {
 			result->activeTransport = MSIP::Utf8DecodeUni(transaction->transport->type_name);
 			char address[PJ_INET6_ADDRSTRLEN + 16];
@@ -991,7 +1034,6 @@ static void on_acc_send_request(pjsua_acc_id, void* token, pjsip_event* event)
 				result->localAddress = MSIP::Utf8DecodeUni(address);
 			}
 		}
-		pjsip_rx_data* response = event->body.tsx_state.src.rdata;
 		if (response && response->pkt_info.src_name[0]) {
 			result->responseSource = MSIP::Utf8DecodeUni(response->pkt_info.src_name);
 			CString port;
@@ -1003,7 +1045,12 @@ static void on_acc_send_request(pjsua_acc_id, void* token, pjsip_event* event)
 		|| !::PostMessage(request->window, UM_DIAL_TONE_OPTIONS, 0, (LPARAM)result)) {
 		delete result;
 	}
-	delete request;
+	destroy_dial_tone_options_token(request);
+}
+
+static void on_acc_send_request(pjsua_acc_id, void* token, pjsip_event* event)
+{
+	on_dial_tone_options_request(token, event);
 }
 
 static int usersDirectorySequence;
@@ -6813,11 +6860,31 @@ void CmainDlg::BeginDialToneReadiness()
 	request->window = m_hWnd;
 	request->generation = m_dialToneGeneration;
 	request->started = GetTickCount();
+	request->pool = pjsua_pool_create("dial_tone_auth", 1024, 1024);
+	request->authInitialized = false;
+	request->authRetries = 0;
+	pjsua_acc_config authConfig;
+	pj_status_t authStatus = request->pool
+		? pjsua_acc_get_config(account, request->pool, &authConfig) : PJ_ENOMEM;
+	if (authStatus == PJ_SUCCESS) {
+		authStatus = pjsip_auth_clt_init(&request->authSession,
+			pjsua_get_pjsip_endpt(), request->pool, 0);
+	}
+	if (authStatus == PJ_SUCCESS) {
+		authStatus = pjsip_auth_clt_set_credentials(&request->authSession,
+			authConfig.cred_count, authConfig.cred_info);
+	}
+	if (authStatus == PJ_SUCCESS) {
+		authStatus = pjsip_auth_clt_set_prefs(&request->authSession, &authConfig.auth_pref);
+	}
+	if (authStatus == PJ_SUCCESS) {
+		request->authInitialized = true;
+	}
 	pj_status_t sendStatus = pjsua_acc_send_request(account, &uri, &method, NULL, request, &msgData);
 	free(uri.ptr);
 	free(method.ptr);
 	if (sendStatus != PJ_SUCCESS) {
-		delete request;
+		destroy_dial_tone_options_token(request);
 		CString error = pj_error_text(sendStatus);
 		if (sendStatus == PJ_EINVAL) {
 			error = _T("PJ_EINVAL · ") + error;
@@ -6853,6 +6920,11 @@ LRESULT CmainDlg::onDialToneOptions(WPARAM, LPARAM lParam)
 			line += _T(" · slow response");
 			state = max(state, 1);
 		}
+	}
+	else if (result->authenticationFailed) {
+		line.Format(_T("SIP           NOT READY · authentication failed · %d %s · %lu ms"),
+			result->statusCode, result->statusText, result->elapsed);
+		state = 2;
 	}
 	else if (result->statusCode > 0 && result->statusCode < 500) {
 		line.Format(_T("SIP           DEGRADED · %d %s · %lu ms"), result->statusCode,
