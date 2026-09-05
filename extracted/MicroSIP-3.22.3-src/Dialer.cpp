@@ -776,9 +776,6 @@ BEGIN_MESSAGE_MAP(Dialer, CBaseDialog)
 	ON_BN_CLICKED(IDC_DELETE, &Dialer::OnBnClickedDelete)
 	ON_BN_CLICKED(IDC_KEY_PLUS, &Dialer::OnBnClickedKeyPlus)
 	ON_BN_CLICKED(IDC_CLEAR, &Dialer::OnBnClickedClear)
-	ON_BN_CLICKED(IDC_DIALER_SPK_CLOCK, &Dialer::OnBnClickedSpkClock)
-	ON_BN_CLICKED(IDC_DIALER_ECHO_TEST, &Dialer::OnBnClickedEchoTest)
-	ON_BN_CLICKED(IDC_DIALER_CALL_TRACE, &Dialer::OnBnClickedCallTrace)
 	ON_BN_CLICKED(IDC_DIALER_ACCOUNT_SWITCH, &Dialer::OnBnClickedAccountSwitch)
 	ON_WM_HSCROLL()
 	ON_WM_CREATE()
@@ -814,11 +811,6 @@ void Dialer::UpdateVoicemailButton(bool hasMail)
 void Dialer::RebuildButtons(bool init)
 {
 	CloseAccountSidecar();
-	if (IsChild(&m_ButtonSpkClock)) {
-		m_ButtonSpkClock.DestroyWindow();
-		m_ButtonEchoTest.DestroyWindow();
-		m_ButtonCallTrace.DestroyWindow();
-	}
 	if (IsChild(&m_AccountIdentity)) {
 		m_AccountIdentity.DestroyWindow();
 	}
@@ -969,15 +961,6 @@ void Dialer::RebuildButtons(bool init)
 			rect.left -= stepPx;
 			rect.right -= stepPx;
 		}
-		CRect lowerControlsRect = rect;
-		const int rowGap = MulDiv(6, dpiY, 96);
-		CRect utilityRect;
-		CRect clientRect;
-		GetClientRect(&clientRect);
-		utilityRect.left = MulDiv(4, dpiY, 96);
-		utilityRect.right = clientRect.right - MulDiv(4, dpiY, 96);
-		utilityRect.top = lowerControlsRect.bottom + rowGap;
-		utilityRect.bottom = utilityRect.top + lowerControlsRect.Height();
 		CRect identityRect = rect;
 		identityRect.left = MulDiv(4, dpiY, 96);
 		int switchWidth = MulDiv(24, dpiY, 96);
@@ -995,39 +978,11 @@ void Dialer::RebuildButtons(bool init)
 		AutoMove(m_AccountIdentity.m_hWnd, 100, 100, 0, 0);
 		UpdateAccountIdentity();
 
-		int utilityWidth = utilityRect.Width() / 3;
-		CRect spkClockRect = utilityRect;
-		spkClockRect.right = spkClockRect.left + utilityWidth;
-		CRect echoTestRect = spkClockRect;
-		echoTestRect.OffsetRect(utilityWidth, 0);
-		CRect callTraceRect = utilityRect;
-		callTraceRect.left = echoTestRect.right;
-		m_ButtonSpkClock.Create(_T("Spk Clock"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, spkClockRect, this, IDC_DIALER_SPK_CLOCK);
-		m_ButtonEchoTest.Create(_T("Echo Test"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, echoTestRect, this, IDC_DIALER_ECHO_TEST);
-		m_ButtonCallTrace.Create(_T("Call Trace"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, callTraceRect, this, IDC_DIALER_CALL_TRACE);
-		m_ButtonSpkClock.SetFont(GetFont());
-		m_ButtonEchoTest.SetFont(GetFont());
-		m_ButtonCallTrace.SetFont(GetFont());
-		AutoMove(m_ButtonSpkClock.m_hWnd, 0, 100, 33, 0);
-		AutoMove(m_ButtonEchoTest.m_hWnd, 33, 100, 34, 0);
-		AutoMove(m_ButtonCallTrace.m_hWnd, 67, 100, 33, 0);
 		SetDarkMode(accountSettings.darkMode);
 		if (!init) {
 			SetWindowPos(NULL, 0, 0, windowRect.Width(), windowRect.Height(), SWP_NOZORDER | SWP_NOMOVE);
 		}
 	}
-}
-
-int Dialer::GetUtilityRowBottom()
-{
-	CWnd* parent = GetParent();
-	if (!parent || !::IsWindow(m_ButtonSpkClock.m_hWnd)) {
-		return 0;
-	}
-	CRect rect;
-	m_ButtonSpkClock.GetWindowRect(&rect);
-	parent->ScreenToClient(&rect);
-	return rect.bottom;
 }
 
 void Dialer::UpdateAccountIdentity()
@@ -1058,9 +1013,6 @@ void Dialer::SetDarkMode(bool enabled)
 	m_ButtonAC.SetDarkMode(enabled);
 	m_ButtonRec.SetDarkMode(enabled);
 	m_ButtonConf.SetDarkMode(enabled);
-	m_ButtonSpkClock.SetDarkMode(enabled);
-	m_ButtonEchoTest.SetDarkMode(enabled);
-	m_ButtonCallTrace.SetDarkMode(enabled);
 	m_ComboNumber.SetDarkMode(enabled);
 	LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
 	m_AccountSwitch.SetDarkMode(enabled);
@@ -1787,16 +1739,6 @@ void Dialer::OnBnClickedRedial()
 	if (!accountSettings.lastCallNumber.IsEmpty()) {
 		SetNumber(accountSettings.lastCallNumber);
 	}
-}
-
-void Dialer::OnBnClickedSpkClock()
-{
-	mainDlg->MakeCall(_T("*60"));
-}
-
-void Dialer::OnBnClickedEchoTest()
-{
-	mainDlg->MakeCall(_T("*43"));
 }
 
 void Dialer::OnBnClickedCallTrace()

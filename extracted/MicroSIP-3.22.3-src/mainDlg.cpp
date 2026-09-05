@@ -228,9 +228,15 @@ public:
 			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_MODE);
 		notesMode.Create(Translate(_T("Call Notes")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTORADIOBUTTON | BS_PUSHLIKE,
 			CRect(0, 0, 0, 0), this, IDC_CALL_NOTES_MODE);
+		spkClock.Create(_T("Spk Clock"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_DIALER_SPK_CLOCK);
+		echoTest.Create(_T("Echo Test"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_DIALER_ECHO_TEST);
 		current.Create(Translate(_T("Current")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_CURRENT);
 		recent.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_RECENT);
+		copy.Create(Translate(_T("Copy")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_COPY);
 		save.Create(Translate(_T("Save")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_SAVE);
 		undo.Create(Translate(_T("Undo")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
@@ -239,9 +245,12 @@ public:
 			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_CLEAR);
 		traceMode.SetFont(parent->GetFont());
 		notesMode.SetFont(parent->GetFont());
+		spkClock.SetFont(parent->GetFont());
+		echoTest.SetFont(parent->GetFont());
 		current.SetFont(parent->GetFont());
 		recent.SetFont(parent->GetFont());
 		save.SetFont(parent->GetFont());
+		copy.SetFont(parent->GetFont());
 		undo.SetFont(parent->GetFont());
 		clear.SetFont(parent->GetFont());
 		log.Create(WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_READONLY
@@ -257,7 +266,7 @@ public:
 		SetDarkMode(accountSettings.darkMode);
 		Reset();
 		RefreshRecent();
-		UpdateUndoState();
+		UpdateActionStates();
 		return true;
 	}
 
@@ -269,6 +278,7 @@ public:
 		if (::IsWindow(log.m_hWnd) && mode == 0 && viewingCurrent) {
 			log.SetWindowText(Translate(_T("No active call")));
 		}
+		UpdateActionStates();
 	}
 
 	void Clear()
@@ -279,6 +289,7 @@ public:
 		if (::IsWindow(log.m_hWnd) && mode == 0 && viewingCurrent) {
 			log.SetWindowText(_T(""));
 		}
+		UpdateActionStates();
 	}
 
 	void Append(CString text)
@@ -300,6 +311,7 @@ public:
 		bool follow = IsScrolledToBottom();
 		POINT original = GetScrollPosition();
 		AppendVisibleLine(line, text.GetLength());
+		UpdateActionStates();
 		if (follow) {
 			log.SetSel(log.GetWindowTextLength(), log.GetWindowTextLength());
 			log.SendMessage(EM_SCROLLCARET);
@@ -361,7 +373,7 @@ public:
 		notesMode.SetCheck(mode == 1 ? BST_CHECKED : BST_UNCHECKED);
 		ShowCurrent();
 		RefreshRecent();
-		UpdateUndoState();
+		UpdateActionStates();
 	}
 
 	void ShowCurrent()
@@ -379,7 +391,7 @@ public:
 			log.ShowWindow(SW_HIDE);
 			notes.ShowWindow(SW_SHOW);
 		}
-		UpdateUndoState();
+		UpdateActionStates();
 	}
 
 	void RefreshRecent()
@@ -436,7 +448,7 @@ public:
 		else {
 			notes.SetWindowText(all);
 		}
-		UpdateUndoState();
+		UpdateActionStates();
 	}
 
 	void Save()
@@ -481,7 +493,7 @@ public:
 		}
 		RefreshRecent();
 		ShowFeedback(FeedbackSave);
-		UpdateUndoState();
+		UpdateActionStates();
 	}
 
 	void SetDarkMode(bool enabled)
@@ -489,8 +501,11 @@ public:
 		darkMode = enabled;
 		traceMode.SetDarkMode(enabled);
 		notesMode.SetDarkMode(enabled);
+		spkClock.SetDarkMode(enabled);
+		echoTest.SetDarkMode(enabled);
 		current.SetDarkMode(enabled);
 		save.SetDarkMode(enabled);
+		copy.SetDarkMode(enabled);
 		undo.SetDarkMode(enabled);
 		clear.SetDarkMode(enabled);
 		recent.SetDarkMode(enabled);
@@ -518,32 +533,30 @@ public:
 		GetClientRect(&client);
 		int pad = MulDiv(4, dpiY, 96);
 		int headerHeight = MulDiv(18, dpiY, 96);
-		int preferredButtonWidth = MulDiv(48, dpiY, 96);
 		int modeWidth = MulDiv(62, dpiY, 96);
-		traceMode.SetWindowPos(NULL, pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-		notesMode.SetWindowPos(NULL, pad + modeWidth + pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		int rowWidth = max(0, client.Width() - pad * 2);
+		int fourButtonWidth = max(0, (rowWidth - pad * 3) / 4);
+		int fourButtonRowWidth = fourButtonWidth * 4 + pad * 3;
+		int fourButtonLeft = pad + max(0, (rowWidth - fourButtonRowWidth) / 2);
+		traceMode.SetWindowPos(NULL, fourButtonLeft, pad, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		notesMode.SetWindowPos(NULL, fourButtonLeft + fourButtonWidth + pad, pad, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		spkClock.SetWindowPos(NULL, fourButtonLeft + (fourButtonWidth + pad) * 2, pad, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		echoTest.SetWindowPos(NULL, fourButtonLeft + (fourButtonWidth + pad) * 3, pad, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
 		int recentTop = pad * 2 + headerHeight;
 		current.SetWindowPos(NULL, pad, recentTop, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
 		int recentLeft = pad + modeWidth + pad;
-		int rowRight = client.right - pad;
-		int actionGap = pad;
-		int groupGap = pad * 2;
-		int minimumRecentWidth = MulDiv(52, dpiY, 96);
-		int available = max(0, rowRight - recentLeft);
-		int buttonWidth = min(preferredButtonWidth,
-			max(0, (available - groupGap - minimumRecentWidth - actionGap * 2) / 3));
-		int actionGroupWidth = buttonWidth * 3 + actionGap * 2;
-		int actionLeft = rowRight - actionGroupWidth;
-		int recentRight = max(recentLeft, actionLeft - groupGap);
-		recent.SetWindowPos(NULL, recentLeft, recentTop, recentRight - recentLeft, MulDiv(120, dpiY, 96), SWP_NOACTIVATE | SWP_NOZORDER);
-		save.SetWindowPos(NULL, actionLeft, recentTop, buttonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-		undo.SetWindowPos(NULL, actionLeft + buttonWidth + actionGap, recentTop, buttonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-		clear.SetWindowPos(NULL, actionLeft + (buttonWidth + actionGap) * 2, recentTop, buttonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		recent.SetWindowPos(NULL, recentLeft, recentTop, max(0, client.right - pad - recentLeft), MulDiv(120, dpiY, 96), SWP_NOACTIVATE | SWP_NOZORDER);
 		int logTop = recentTop + headerHeight + pad;
-		log.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, max(0, client.bottom - logTop - pad),
+		int actionTop = max(logTop, client.bottom - pad - headerHeight);
+		int editorHeight = max(0, actionTop - pad - logTop);
+		log.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, editorHeight,
 			SWP_NOACTIVATE | SWP_NOZORDER);
-		notes.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, max(0, client.bottom - logTop - pad),
+		notes.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, editorHeight,
 			SWP_NOACTIVATE | SWP_NOZORDER);
+		copy.SetWindowPos(NULL, fourButtonLeft, actionTop, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		save.SetWindowPos(NULL, fourButtonLeft + fourButtonWidth + pad, actionTop, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		undo.SetWindowPos(NULL, fourButtonLeft + (fourButtonWidth + pad) * 2, actionTop, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		clear.SetWindowPos(NULL, fourButtonLeft + (fourButtonWidth + pad) * 3, actionTop, fourButtonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
 	}
 
 	// The children keep WS_VISIBLE while the panel is hidden, so showing the panel does not invalidate them.
@@ -624,20 +637,30 @@ protected:
 			notes.SetWindowText(_T(""));
 			ShowFeedback(FeedbackClear);
 		}
-		UpdateUndoState();
+		UpdateActionStates();
 	}
 	afx_msg void OnTraceMode() { ShowMode(0); }
 	afx_msg void OnNotesMode() { ShowMode(1); }
 	afx_msg void OnCurrent() { ShowCurrent(); }
 	afx_msg void OnSave() { Save(); }
+	afx_msg void OnCopy()
+	{
+		CString text;
+		if (mode == 0) log.GetWindowText(text);
+		else notes.GetWindowText(text);
+		if (!text.IsEmpty()) mainDlg->CopyStringToClipboard(text);
+		UpdateActionStates();
+	}
 	afx_msg void OnUndo()
 	{
 		if (mode == 1 && notes.SendMessage(EM_CANUNDO)) {
 			notes.SendMessage(EM_UNDO);
 		}
-		UpdateUndoState();
+		UpdateActionStates();
 	}
-	afx_msg void OnNotesUpdate() { UpdateUndoState(); }
+	afx_msg void OnNotesUpdate() { UpdateActionStates(); }
+	afx_msg void OnSpkClock() { mainDlg->MakeCall(_T("*60")); }
+	afx_msg void OnEchoTest() { mainDlg->MakeCall(_T("*43")); }
 	afx_msg void OnRecentChange() { LoadRecent(); }
 	afx_msg void OnTraceScroll()
 	{
@@ -672,10 +695,14 @@ private:
 		clear.ClearFlash();
 	}
 
-	void UpdateUndoState()
+	void UpdateActionStates()
 	{
 		if (::IsWindow(undo.m_hWnd)) {
 			undo.EnableWindow(mode == 1 && ::IsWindow(notes.m_hWnd) && notes.SendMessage(EM_CANUNDO));
+		}
+		if (::IsWindow(copy.m_hWnd)) {
+			int length = mode == 0 ? log.GetWindowTextLength() : notes.GetWindowTextLength();
+			copy.EnableWindow(length > 0);
 		}
 	}
 
@@ -906,8 +933,11 @@ private:
 
 	CButtonBottom traceMode;
 	CButtonBottom notesMode;
+	CButtonBottom spkClock;
+	CButtonBottom echoTest;
 	CButtonBottom current;
 	CDarkComboBox recent;
+	CButtonBottom copy;
 	CButtonBottom save;
 	CButtonBottom undo;
 	CButtonBottom clear;
@@ -938,7 +968,10 @@ BEGIN_MESSAGE_MAP(CmainDlg::CCallTracePanel, CWnd)
 	ON_BN_CLICKED(IDC_CALL_NOTES_MODE, OnNotesMode)
 	ON_BN_CLICKED(IDC_CALL_RECORD_CURRENT, OnCurrent)
 	ON_BN_CLICKED(IDC_CALL_RECORD_SAVE, OnSave)
+	ON_BN_CLICKED(IDC_CALL_RECORD_COPY, OnCopy)
 	ON_BN_CLICKED(IDC_CALL_RECORD_UNDO, OnUndo)
+	ON_BN_CLICKED(IDC_DIALER_SPK_CLOCK, OnSpkClock)
+	ON_BN_CLICKED(IDC_DIALER_ECHO_TEST, OnEchoTest)
 	ON_CBN_SELCHANGE(IDC_CALL_RECORD_RECENT, OnRecentChange)
 	ON_EN_UPDATE(IDC_CALL_NOTES_EDIT, OnNotesUpdate)
 	ON_EN_VSCROLL(IDC_CALL_TRACE_LOG, OnTraceScroll)
@@ -6639,7 +6672,7 @@ void CmainDlg::LayoutFreepbxFooter()
 	LayoutCallTracePanel();
 }
 
-// Uses the blank region below the dialler utility row and above the footer; no existing control is moved.
+// Uses the blank region below the dialler page and above the footer.
 void CmainDlg::LayoutCallTracePanel()
 {
 	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !m_freepbxFooter
@@ -6659,9 +6692,7 @@ void CmainDlg::LayoutCallTracePanel()
 	m_freepbxFooter->GetWindowRect(&footer);
 	ScreenToClient(&footer);
 	int gap = MulDiv(10, dpiY, 96);
-	// The dialler page keeps unused template space below its utility row; start below the row itself.
-	int utilityBottom = pageDialer->GetUtilityRowBottom();
-	int top = (utilityBottom > 0 ? min(utilityBottom, (int)page.bottom) : page.bottom) + gap;
+	int top = page.bottom + gap;
 	int height = footer.top - gap - top;
 	if (height < MulDiv(60, dpiY, 96)) {
 		m_callTracePanel->ShowWindow(SW_HIDE);

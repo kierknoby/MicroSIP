@@ -61,9 +61,6 @@ class Dialer :
 	CButtonDialer m_ButtonDialerRedial;
 	CLevelsSliderCtrl m_SliderCtrlInput;
 	CLevelsSliderCtrl m_SliderCtrlOutput;
-	CButtonBottom m_ButtonSpkClock;
-	CButtonBottom m_ButtonEchoTest;
-	CButtonBottom m_ButtonCallTrace;
 	CDarkIconButton m_AccountSwitch;
 	CStatic m_AccountIdentity;
 	CAccountSidecar* m_accountSidecar;
@@ -141,9 +138,6 @@ public:
 	void Action(DialerActions action);
 	void Clear(bool update=true, bool preserveQualification=false);
 	void TimerVuMeter();
-	// Bottom of the utility button row in parent client coordinates; 0 when the row does not exist.
-	int GetUtilityRowBottom();
-
 	void SetCheckDND(bool checked);
 	void SetCheckREC(bool checked);
 	void EnableButtonCONF(bool enabled);
@@ -207,8 +201,6 @@ public:
 	afx_msg void OnBnClickedKeyPlus();
 	afx_msg void OnBnClickedClear();
 	afx_msg void OnBnClickedRedial();
-	afx_msg void OnBnClickedSpkClock();
-	afx_msg void OnBnClickedEchoTest();
 	afx_msg void OnBnClickedCallTrace();
 	afx_msg void OnBnClickedAccountSwitch();
 	afx_msg void OnBnClickedDelete();
