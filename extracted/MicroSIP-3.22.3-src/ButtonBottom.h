@@ -28,12 +28,18 @@ public:
 	CButtonBottom();
 	virtual ~CButtonBottom();
 	void SetDarkMode(bool enabled);
+	// Transient feedback colours that win over both theme and hover/pushed state.
+	void SetFlash(COLORREF background, COLORREF text);
+	void ClearFlash();
 private:
 	COLORREF m_clrButton;
 	COLORREF m_clrButtonHover;
 	COLORREF m_clrButtonPushed;
 	COLORREF m_clrButtonText;
 	COLORREF m_clrButtonTextPushed;
+	bool m_flashActive;
+	COLORREF m_clrFlash;
+	COLORREF m_clrFlashText;
 protected: 
 	DECLARE_MESSAGE_MAP()
 public: 

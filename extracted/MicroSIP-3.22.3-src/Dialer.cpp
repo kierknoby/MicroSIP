@@ -240,6 +240,11 @@ void Dialer::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_CLEAR, m_ButtonDialerClear);
 	DDX_Control(pDX, IDC_CALL, m_ButtonCall);
 	DDX_Control(pDX, IDC_END, m_ButtonEnd);
+	DDX_Control(pDX, IDC_NUMBER, m_ComboNumber);
+#ifdef _GLOBAL_VIDEO
+	DDX_Control(pDX, IDC_VIDEO_CALL, m_ButtonVideoCall);
+#endif
+	DDX_Control(pDX, IDC_MESSAGE, m_ButtonMessage);
 }
 
 void Dialer::RebuildShortcutsRestart()
@@ -678,10 +683,10 @@ BOOL Dialer::OnInitDialog()
 	((CButton*)GetDlgItem(IDC_TRANSFER))->SetIcon(m_hIconTransfer);
 #ifdef _GLOBAL_VIDEO
 	m_hIconVideo = LoadImageIcon(IDI_VIDEO, 16, 16);
-	((CButton*)GetDlgItem(IDC_VIDEO_CALL))->SetIcon(m_hIconVideo);
+	m_ButtonVideoCall.SetImage(m_hIconVideo, FALSE);
 #endif
 	m_hIconMessage = LoadImageIcon(IDI_MESSAGE, 16, 16);
-	((CButton*)GetDlgItem(IDC_MESSAGE))->SetIcon(m_hIconMessage);
+	m_ButtonMessage.SetImage(m_hIconMessage, FALSE);
 
 	UpdateCallButton();
 
@@ -1005,6 +1010,18 @@ void Dialer::RebuildButtons(bool init)
 	}
 }
 
+int Dialer::GetUtilityRowBottom()
+{
+	CWnd* parent = GetParent();
+	if (!parent || !::IsWindow(m_ButtonSpkClock.m_hWnd)) {
+		return 0;
+	}
+	CRect rect;
+	m_ButtonSpkClock.GetWindowRect(&rect);
+	parent->ScreenToClient(&rect);
+	return rect.bottom;
+}
+
 void Dialer::UpdateAccountIdentity()
 {
 	if (!IsChild(&m_AccountIdentity)) {
@@ -1016,31 +1033,33 @@ void Dialer::UpdateAccountIdentity()
 
 void Dialer::SetDarkMode(bool enabled)
 {
-			m_ButtonCall.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
+	m_ButtonCall.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
 	m_ButtonCall.m_TextColor = RGB(255, 255, 255);
 	m_ButtonEnd.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_END_COLOR;
 	m_ButtonEnd.m_TextColor = RGB(255, 255, 255);
+	// CButtonEx only pushes its colours into CMFCButton from EnableWindow.
+	m_ButtonCall.EnableWindow(m_ButtonCall.IsWindowEnabled());
+	m_ButtonEnd.EnableWindow(m_ButtonEnd.IsWindowEnabled());
 	m_ButtonDND.SetDarkMode(enabled);
 	m_ButtonFWD.SetDarkMode(enabled);
 	m_ButtonAA.SetDarkMode(enabled);
 	m_ButtonAC.SetDarkMode(enabled);
 	m_ButtonRec.SetDarkMode(enabled);
 	m_ButtonConf.SetDarkMode(enabled);
+	m_ButtonSpkClock.SetDarkMode(enabled);
+	m_ButtonEchoTest.SetDarkMode(enabled);
+	m_ButtonCallTrace.SetDarkMode(enabled);
+#ifdef _GLOBAL_VIDEO
+	m_ButtonVideoCall.SetDarkMode(enabled);
+#endif
+	m_ButtonMessage.SetDarkMode(enabled);
+	m_ComboNumber.SetDarkMode(enabled);
 	LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
-	SetWindowTheme(m_ButtonSpkClock.m_hWnd, theme, NULL);
-	SetWindowTheme(m_ButtonEchoTest.m_hWnd, theme, NULL);
-	SetWindowTheme(m_ButtonCallTrace.m_hWnd, theme, NULL);
 	SetWindowTheme(m_AccountSwitch.m_hWnd, theme, NULL);
-	SetWindowTheme(GetDlgItem(IDC_NUMBER)->m_hWnd, theme, NULL);
-	SetWindowTheme(GetDlgItem(IDC_VIDEO_CALL)->m_hWnd, theme, NULL);
-	SetWindowTheme(GetDlgItem(IDC_MESSAGE)->m_hWnd, theme, NULL);
 	SetWindowTheme(GetDlgItem(IDC_BUTTON_MUTE_OUTPUT)->m_hWnd, theme, NULL);
 	SetWindowTheme(GetDlgItem(IDC_BUTTON_MUTE_INPUT)->m_hWnd, theme, NULL);
 	SetWindowTheme(m_SliderCtrlOutput.m_hWnd, theme, NULL);
 	SetWindowTheme(m_SliderCtrlInput.m_hWnd, theme, NULL);
-	GetDlgItem(IDC_NUMBER)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
-	GetDlgItem(IDC_VIDEO_CALL)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
-	GetDlgItem(IDC_MESSAGE)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	GetDlgItem(IDC_BUTTON_MUTE_OUTPUT)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	GetDlgItem(IDC_BUTTON_MUTE_INPUT)->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 	m_SliderCtrlOutput.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);

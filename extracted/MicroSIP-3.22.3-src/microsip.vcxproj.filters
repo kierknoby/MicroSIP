@@ -153,6 +153,9 @@
     <ClCompile Include="ButtonBottom.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DarkControls.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="FeatureCodesDlg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -312,6 +315,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ButtonBottom.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DarkControls.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ButtonSafe.h">

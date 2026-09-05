@@ -34,6 +34,10 @@ CButtonBottom::CButtonBottom()
 	m_clrButtonPushed = RGB(92, 145, 219);
 	m_clrButtonText = RGB(0, 0, 0);
 	m_clrButtonTextPushed = RGB(255, 255, 255);
+
+	m_flashActive = false;
+	m_clrFlash = RGB(255, 255, 255);
+	m_clrFlashText = RGB(255, 255, 255);
 }
 
 CButtonBottom::~CButtonBottom()
@@ -56,7 +60,32 @@ void CButtonBottom::SetDarkMode(bool enabled)
 		m_clrButtonText = RGB(0, 0, 0);
 		m_clrButtonTextPushed = RGB(255, 255, 255);
 	}
-	Invalidate();
+	if (::IsWindow(m_hWnd)) {
+		Invalidate();
+	}
+}
+
+void CButtonBottom::SetFlash(COLORREF background, COLORREF text)
+{
+	m_flashActive = true;
+	m_clrFlash = background;
+	m_clrFlashText = text;
+	if (::IsWindow(m_hWnd)) {
+		Invalidate();
+		UpdateWindow();
+	}
+}
+
+void CButtonBottom::ClearFlash()
+{
+	if (!m_flashActive) {
+		return;
+	}
+	m_flashActive = false;
+	if (::IsWindow(m_hWnd)) {
+		Invalidate();
+		UpdateWindow();
+	}
 }
 
 BEGIN_MESSAGE_MAP(CButtonBottom, CMFCButton)
@@ -87,23 +116,32 @@ void CButtonBottom::OnKillFocus(CWnd* pNewWnd)
 
 void CButtonBottom::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 {
+	COLORREF face;
+	COLORREF text;
 	if (m_bCheckButton && m_bChecked) {
-		m_clrFace = m_clrButtonPushed;
-		m_clrRegular = m_clrButtonTextPushed;
+		face = m_clrButtonPushed;
+		text = m_clrButtonTextPushed;
 	}
 	else {
 		if (m_bPushed) {
-			m_clrFace = m_clrButtonPushed;
-			m_clrRegular = m_clrButtonTextPushed;
+			face = m_clrButtonPushed;
+			text = m_clrButtonTextPushed;
 		}
 		else if (m_bHover) {
-			m_clrFace = m_clrButtonHover;
-			m_clrRegular = m_clrButtonText;
+			face = m_clrButtonHover;
+			text = m_clrButtonText;
 		}
 		else {
-			m_clrFace = m_clrButton;
-			m_clrRegular = m_clrButtonText;
+			face = m_clrButton;
+			text = m_clrButtonText;
 		}
 	}
+	m_clrFace = m_flashActive ? m_clrFlash : face;
+	m_clrRegular = m_flashActive ? m_clrFlashText : text;
 	CMFCButton::DrawItem(lpDIS);
+	if (m_flashActive) {
+		// CMFCButton draws from its members, so the transient colours are undone straight away.
+		m_clrFace = face;
+		m_clrRegular = text;
+	}
 }

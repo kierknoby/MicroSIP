@@ -50,6 +50,7 @@
 #include "Preview.h"
 #include "Transfer.h"
 #include "StatusBar.h"
+#include "DarkControls.h"
 
 // CmainDlg dialog
 class CmainDlg : public CBaseDialog
@@ -64,6 +65,7 @@ public:
 
 	bool m_startMinimized;
 	CButton m_ButtonMenu;
+	CDarkTabCtrl m_tabCtrl;
 	SettingsDlg* settingsDlg;
 	bool shortcutsEnabled;
 	bool shortcutsBottom;

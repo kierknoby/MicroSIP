@@ -14,6 +14,16 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 
 	switch (pNmcd->dwDrawStage) {
 	case CDDS_PREPAINT:
+		if (accountSettings.darkMode) {
+			CDC *pDC = CDC::FromHandle(pNmcd->hdc);
+			if (pDC) {
+				CRect client;
+				GetClientRect(&client);
+				pDC->FillSolidRect(&client, DarkPalette::Window());
+			}
+			*result = CDRF_NOTIFYITEMDRAW;
+			break;
+		}
 		if (GetStyle() & TBS_ENABLESELRANGE) {
 			*result = CDRF_NOTIFYITEMDRAW;
 		}
@@ -38,6 +48,7 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 		}
 		case TBCD_CHANNEL: {
 			CDC *pDC = CDC::FromHandle(pNmcd->hdc);
+			bool dark = accountSettings.darkMode;
 			if (pDC) {
 				int min, max, selmin, selmax;
 				bool hot;
@@ -53,17 +64,23 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 						rect.left ^= rect.top ^= rect.left ^= rect.top; // swap left and top values
 						rect.right ^= rect.bottom ^= rect.right ^= rect.bottom; // swap right and bottom values
 					}
-					rect.DeflateRect(2, 2);
+					rect.DeflateRect(dark ? 0 : 2, dark ? 0 : 2);
 					selmin = (int)(((double)(selmin - min) / max * rect.Height()) + 0.5) + rect.top;
 					selmax = (int)(((double)(selmax - min) / max * rect.Height()) + 0.5) + rect.top;
 					if (!IsActive) {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? DarkPalette::Active() : pDC->GetBkColor());
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), dark ? DarkPalette::Input() : pDC->GetBkColor());
 					}
 					else {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? DarkPalette::Active() : GetSysColor(COLOR_WINDOW));
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), dark ? DarkPalette::Input() : GetSysColor(COLOR_WINDOW));
 					}
 					pDC->FillSolidRect(CRect(rect.left, selmin, rect.right, selmax), hot ? RGB(255, 0, 0) : GetSysColor(COLOR_HIGHLIGHT));
-					pDC->ExcludeClipRect(rect);
+					if (dark) {
+						CBrush border(DarkPalette::Border());
+						pDC->FrameRect(rect, &border);
+					}
+					else {
+						pDC->ExcludeClipRect(rect);
+					}
 				}
 				else {
 					hot = selmax >= GetRangeMax();
@@ -72,20 +89,26 @@ void CLevelsSliderCtrl::OnCustomDraw(NMHDR *pNotifyStruct, LRESULT *result)
 						rect.left ^= rect.top ^= rect.left ^= rect.top; // swap left and top values
 						rect.right ^= rect.bottom ^= rect.right ^= rect.bottom; // swap right and bottom values
 					}
-					rect.DeflateRect(2, 2);
+					rect.DeflateRect(dark ? 0 : 2, dark ? 0 : 2);
 					selmin = (int)(((double)(selmin - min) / max * rect.Width()) + 0.5) + rect.left;
 					selmax = (int)(((double)(selmax - min) / max * rect.Width()) + 0.5) + rect.left;
 					if (!IsActive) {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? DarkPalette::Active() : pDC->GetBkColor());
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), dark ? DarkPalette::Input() : pDC->GetBkColor());
 					}
 					else {
-						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), accountSettings.darkMode ? DarkPalette::Active() : GetSysColor(COLOR_WINDOW));
+						pDC->FillSolidRect(CRect(rect.left, rect.top, rect.right, rect.bottom), dark ? DarkPalette::Input() : GetSysColor(COLOR_WINDOW));
 					}
 					pDC->FillSolidRect(CRect(selmin, rect.top, selmax, rect.bottom), hot ? RGB(255, 0, 0) : GetSysColor(COLOR_HIGHLIGHT));
-					pDC->ExcludeClipRect(rect);
+					if (dark) {
+						CBrush border(DarkPalette::Border());
+						pDC->FrameRect(rect, &border);
+					}
+					else {
+						pDC->ExcludeClipRect(rect);
+					}
 				}
 			}
-			*result = CDRF_DODEFAULT | CDRF_NOTIFYPOSTPAINT;
+			*result = dark ? CDRF_SKIPDEFAULT : (CDRF_DODEFAULT | CDRF_NOTIFYPOSTPAINT);
 			break;
 		}
 		}

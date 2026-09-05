@@ -27,6 +27,7 @@
 #include "afxbutton.h"
 #include "ButtonEx.h"
 #include "ButtonBottom.h"
+#include "DarkControls.h"
 
 enum DialerActions {
 	ACTION_CALL, ACTION_VIDEO_CALL, ACTION_MESSAGE
@@ -60,9 +61,9 @@ class Dialer :
 	CButtonDialer m_ButtonDialerRedial;
 	CLevelsSliderCtrl m_SliderCtrlInput;
 	CLevelsSliderCtrl m_SliderCtrlOutput;
-	CButton m_ButtonSpkClock;
-	CButton m_ButtonEchoTest;
-	CButton m_ButtonCallTrace;
+	CButtonBottom m_ButtonSpkClock;
+	CButtonBottom m_ButtonEchoTest;
+	CButtonBottom m_ButtonCallTrace;
 	CButton m_AccountSwitch;
 	CStatic m_AccountIdentity;
 	CAccountSidecar* m_accountSidecar;
@@ -93,6 +94,12 @@ public:
 	CButtonEx m_ButtonCall;
 	//CMFCButton m_ButtonCall;
 	CButtonEx m_ButtonEnd;
+
+#ifdef _GLOBAL_VIDEO
+	CButtonBottom m_ButtonVideoCall;
+#endif
+	CButtonBottom m_ButtonMessage;
+	CDarkComboBox m_ComboNumber;
 
 	bool m_isButtonVoicemailVisible;
 	bool m_hasVoicemail;
@@ -132,6 +139,8 @@ public:
 	void Action(DialerActions action);
 	void Clear(bool update=true);
 	void TimerVuMeter();
+	// Bottom of the utility button row in parent client coordinates; 0 when the row does not exist.
+	int GetUtilityRowBottom();
 
 	void SetCheckDND(bool checked);
 	void SetCheckREC(bool checked);

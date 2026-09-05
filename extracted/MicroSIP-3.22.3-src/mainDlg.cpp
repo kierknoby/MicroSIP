@@ -46,6 +46,7 @@
 #include "atlrx.h"
 #include "StdioFileEx.h"
 #include "DarkPalette.h"
+#include "ButtonBottom.h"
 
 #include "afxvisualmanager.h"
 #include "afxvisualmanagerwindows.h"
@@ -198,6 +199,10 @@ BEGIN_MESSAGE_MAP(CmainDlg::CFreepbxFooter, CWnd)
 END_MESSAGE_MAP()
 
 // Scrolling technical event log for the current call session.
+static const COLORREF CALL_TRACE_SAVE_FLASH_COLOR = RGB(34, 139, 34);
+static const COLORREF CALL_TRACE_CLEAR_FLASH_COLOR = RGB(178, 34, 34);
+static const COLORREF CALL_TRACE_FLASH_TEXT_COLOR = RGB(255, 255, 255);
+
 class CmainDlg::CCallTracePanel : public CWnd
 {
 public:
@@ -216,14 +221,7 @@ public:
 		lf.lfCharSet = DEFAULT_CHARSET;
 		StringCchCopy(lf.lfFaceName, LF_FACESIZE, _T("Consolas"));
 		logFont.CreateFontIndirect(&lf);
-		lf.lfHeight = -MulDiv(12, dpiY, 96);
-		lf.lfWeight = FW_BOLD;
-		StringCchCopy(lf.lfFaceName, LF_FACESIZE, _T("Segoe UI"));
-		headingFont.CreateFontIndirect(&lf);
 
-		heading.Create(Translate(_T("Call Trace")), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-			CRect(0, 0, 0, 0), this);
-		heading.SetFont(&headingFont);
 		traceMode.Create(Translate(_T("Call Trace")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTORADIOBUTTON | BS_PUSHLIKE,
 			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_MODE);
 		notesMode.Create(Translate(_T("Call Notes")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTORADIOBUTTON | BS_PUSHLIKE,
@@ -245,7 +243,7 @@ public:
 			| ES_AUTOVSCROLL | ES_LEFT, CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_LOG);
 		log.SetFont(&logFont);
 		notes.Create(WS_CHILD | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_LEFT,
-			CRect(0, 0, 0, 0), this, IDC_CALL_NOTES_MODE);
+			CRect(0, 0, 0, 0), this, IDC_CALL_NOTES_EDIT);
 		notes.SetFont(&logFont);
 		traceMode.SetCheck(BST_CHECKED);
 		mode = 0;
@@ -351,7 +349,6 @@ public:
 		viewingCurrent = true;
 		traceMode.SetCheck(mode == 0 ? BST_CHECKED : BST_UNCHECKED);
 		notesMode.SetCheck(mode == 1 ? BST_CHECKED : BST_UNCHECKED);
-		heading.SetWindowText(mode == 0 ? Translate(_T("Call Trace")) : Translate(_T("Call Notes")));
 		ShowCurrent();
 		RefreshRecent();
 	}
@@ -470,19 +467,20 @@ public:
 			savedCurrentNotes = currentNotes;
 		}
 		RefreshRecent();
+		ShowFeedback(FeedbackSave);
 	}
 
 	void SetDarkMode(bool enabled)
 	{
 		darkMode = enabled;
+		traceMode.SetDarkMode(enabled);
+		notesMode.SetDarkMode(enabled);
+		current.SetDarkMode(enabled);
+		save.SetDarkMode(enabled);
+		clear.SetDarkMode(enabled);
+		recent.SetDarkMode(enabled);
 		SetWindowTheme(log.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
 		SetWindowTheme(notes.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		SetWindowTheme(traceMode.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		SetWindowTheme(notesMode.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		SetWindowTheme(current.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		SetWindowTheme(recent.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		SetWindowTheme(save.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		SetWindowTheme(clear.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
 		clear.Invalidate();
 		log.Invalidate();
 		Invalidate();
@@ -501,8 +499,6 @@ public:
 		int modeWidth = MulDiv(62, dpiY, 96);
 		traceMode.SetWindowPos(NULL, pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
 		notesMode.SetWindowPos(NULL, pad + modeWidth + pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-		heading.SetWindowPos(NULL, pad + modeWidth * 2 + pad * 3, pad, client.Width() - modeWidth * 2 - buttonWidth * 2 - pad * 7, headerHeight,
-			SWP_NOACTIVATE | SWP_NOZORDER);
 		save.SetWindowPos(NULL, client.right - buttonWidth * 2 - pad * 3, pad, buttonWidth, headerHeight,
 			SWP_NOACTIVATE | SWP_NOZORDER);
 		clear.SetWindowPos(NULL, client.right - buttonWidth - pad, pad, buttonWidth, headerHeight,
@@ -550,6 +546,10 @@ protected:
 	}
 	afx_msg void OnTimer(UINT_PTR timerId)
 	{
+		if (timerId == IDT_CALL_TRACE_FEEDBACK) {
+			EndFeedback();
+			return;
+		}
 		if (timerId != IDT_CALL_TRACE_SCROLL) {
 			CWnd::OnTimer(timerId);
 			return;
@@ -571,8 +571,15 @@ protected:
 	}
 	afx_msg void OnClear()
 	{
-		if (mode == 0 && viewingCurrent) Clear();
-		else if (mode == 1 && viewingCurrent) { currentNotes.Empty(); notes.SetWindowText(_T("")); }
+		if (mode == 0 && viewingCurrent) {
+			Clear();
+			ShowFeedback(FeedbackClear);
+		}
+		else if (mode == 1 && viewingCurrent) {
+			currentNotes.Empty();
+			notes.SetWindowText(_T(""));
+			ShowFeedback(FeedbackClear);
+		}
 	}
 	afx_msg void OnTraceMode() { ShowMode(0); }
 	afx_msg void OnNotesMode() { ShowMode(1); }
@@ -588,7 +595,29 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 private:
-	enum { IDT_CALL_TRACE_SCROLL = 0x7F01, CALL_TRACE_SCROLL_FRAME_MS = 16 };
+	enum { IDT_CALL_TRACE_SCROLL = 0x7F01, CALL_TRACE_SCROLL_FRAME_MS = 16,
+		IDT_CALL_TRACE_FEEDBACK = 0x7F02, CALL_TRACE_FEEDBACK_MS = 600 };
+	enum FeedbackState { FeedbackNone, FeedbackSave, FeedbackClear };
+
+	// A single active state keeps repeated or alternating clicks from stranding either button.
+	void ShowFeedback(FeedbackState state)
+	{
+		EndFeedback();
+		if (state == FeedbackSave) {
+			save.SetFlash(CALL_TRACE_SAVE_FLASH_COLOR, CALL_TRACE_FLASH_TEXT_COLOR);
+		}
+		else if (state == FeedbackClear) {
+			clear.SetFlash(CALL_TRACE_CLEAR_FLASH_COLOR, CALL_TRACE_FLASH_TEXT_COLOR);
+		}
+		SetTimer(IDT_CALL_TRACE_FEEDBACK, CALL_TRACE_FEEDBACK_MS, NULL);
+	}
+
+	void EndFeedback()
+	{
+		KillTimer(IDT_CALL_TRACE_FEEDBACK);
+		save.ClearFlash();
+		clear.ClearFlash();
+	}
 
 	void ResetPresentation()
 	{
@@ -792,17 +821,15 @@ private:
 		lineCount = maxLines;
 	}
 
-	CStatic heading;
-	CButton traceMode;
-	CButton notesMode;
-	CButton current;
-	CComboBox recent;
-	CButton save;
-	CButton clear;
+	CButtonBottom traceMode;
+	CButtonBottom notesMode;
+	CButtonBottom current;
+	CDarkComboBox recent;
+	CButtonBottom save;
+	CButtonBottom clear;
 	CRichEditCtrl log;
 	CEdit notes;
 	CFont logFont;
-	CFont headingFont;
 	int lineCount;
 	bool darkMode = false;
 	int mode;
@@ -2495,6 +2522,7 @@ void CmainDlg::DoDataExchange(CDataExchange * pDX)
 	CBaseDialog::DoDataExchange(pDX);
 	//	DDX_Control(pDX, IDD_MAIN, *mainDlg);
 	DDX_Control(pDX, IDC_MAIN_MENU, m_ButtonMenu);
+	DDX_Control(pDX, IDC_MAIN_TAB, m_tabCtrl);
 }
 
 BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
@@ -2847,11 +2875,16 @@ BOOL CmainDlg::OnInitDialog()
 	int mW = accountSettings.mainW > 0 ? accountSettings.mainW : rect.Width();
 
 	int mH = accountSettings.mainH > 0 ? accountSettings.mainH : rect.Height();
-	// coors not specified, first run
-	if (!accountSettings.mainX && !accountSettings.mainY) {
-		CRect primaryScreenRect;
-		SystemParametersInfo(SPI_GETWORKAREA, 0, &primaryScreenRect, 0);
-		mx = primaryScreenRect.Width() - mW - widthAdd;
+	CRect primaryScreenRect;
+	SystemParametersInfo(SPI_GETWORKAREA, 0, &primaryScreenRect, 0);
+	CRect savedRect(accountSettings.mainX, accountSettings.mainY,
+		accountSettings.mainX + mW + widthAdd, accountSettings.mainY + mH);
+	// No saved coordinates is the first run; a saved rectangle on no current monitor is stale.
+	bool recoverToPrimary = (!accountSettings.mainX && !accountSettings.mainY)
+		|| MonitorFromRect(&savedRect, MONITOR_DEFAULTTONULL) == NULL;
+	if (recoverToPrimary) {
+		// Horizontally centred on the primary work area; height stays taskbar-aware below.
+		mx = primaryScreenRect.left + (primaryScreenRect.Width() - mW - widthAdd) / 2;
 		my = primaryScreenRect.Height() - mH;
 	}
 	else {
@@ -3207,6 +3240,7 @@ void CmainDlg::ApplyDarkMode()
 	}
 	SetWindowTheme(m_ButtonMenu.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
 	SetWindowTheme(m_bar.m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
+	m_tabCtrl.SetDarkMode(accountSettings.darkMode);
 	CStatusBarCtrl& statusctrl = m_bar.GetStatusBarCtrl();
 	statusctrl.SetBkColor(accountSettings.darkMode ? DarkPalette::Window() : GetSysColor(COLOR_3DFACE));
 	if (pageDialer) {
@@ -6347,7 +6381,7 @@ void CmainDlg::LayoutFreepbxFooter()
 	LayoutCallTracePanel();
 }
 
-// Uses only the blank region between the dialler page and the footer; no existing control is moved.
+// Uses the blank region below the dialler utility row and above the footer; no existing control is moved.
 void CmainDlg::LayoutCallTracePanel()
 {
 	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !m_freepbxFooter
@@ -6366,15 +6400,17 @@ void CmainDlg::LayoutCallTracePanel()
 	ScreenToClient(&page);
 	m_freepbxFooter->GetWindowRect(&footer);
 	ScreenToClient(&footer);
-	int gap = MulDiv(6, dpiY, 96);
-	int top = page.bottom + gap;
+	int gap = MulDiv(10, dpiY, 96);
+	// The dialler page keeps unused template space below its utility row; start below the row itself.
+	int utilityBottom = pageDialer->GetUtilityRowBottom();
+	int top = (utilityBottom > 0 ? min(utilityBottom, (int)page.bottom) : page.bottom) + gap;
 	int height = footer.top - gap - top;
 	if (height < MulDiv(60, dpiY, 96)) {
 		m_callTracePanel->ShowWindow(SW_HIDE);
 		return;
 	}
-	m_callTracePanel->SetWindowPos(NULL, page.left, top, page.Width(), height,
-		SWP_NOACTIVATE | SWP_NOZORDER);
+	m_callTracePanel->SetWindowPos(&wndTop, page.left, top, page.Width(), height,
+		SWP_NOACTIVATE);
 	m_callTracePanel->ShowWindow(SW_SHOW);
 	m_callTracePanel->LayoutChildren();
 }
