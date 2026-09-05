@@ -952,6 +952,24 @@ static CString pj_error_text(pj_status_t status)
 	return MSIP::Utf8DecodeUni(text);
 }
 
+static CString sip_target_for_trace(CString target)
+{
+	target.Trim();
+	int headers = target.Find(_T('?'));
+	if (headers != -1) {
+		target = target.Left(headers);
+	}
+	int scheme = target.Find(_T(':'));
+	int at = target.ReverseFind(_T('@'));
+	if (scheme != -1 && at > scheme) {
+		CString userInfo = target.Mid(scheme + 1, at - scheme - 1);
+		if (userInfo.Find(_T(':')) != -1) {
+			target = target.Left(scheme + 1) + _T("<redacted>") + target.Mid(at);
+		}
+	}
+	return target;
+}
+
 static void on_acc_send_request(pjsua_acc_id, void* token, pjsip_event* event)
 {
 	DialToneOptionsToken* request = (DialToneOptionsToken*)token;
@@ -6777,20 +6795,34 @@ void CmainDlg::BeginDialToneReadiness()
 		pj_pool_release(pool);
 	}
 	if (destination.IsEmpty()) {
-		destination = _T("sip:") + m_dialToneServer;
+		destination = m_dialToneServer;
+		destination.Trim();
+		if (destination.Left(4).CompareNoCase(_T("sip:")) != 0
+			&& destination.Left(5).CompareNoCase(_T("sips:")) != 0) {
+			destination = _T("sip:") + destination;
+			AddTransportSuffix(destination, &accountSettings.account);
+		}
 	}
 	pj_str_t uri = MSIP::StrToPjStr(destination);
 	pj_str_t method = MSIP::StrToPjStr(_T("OPTIONS"));
+	pjsua_msg_data msgData;
+	pjsua_msg_data_init(&msgData);
+	msgData.target_uri = uri;
+	m_callTracePanel->Append(_T("SIP           CHECKING · OPTIONS ") + sip_target_for_trace(destination));
 	DialToneOptionsToken* request = new DialToneOptionsToken();
 	request->window = m_hWnd;
 	request->generation = m_dialToneGeneration;
 	request->started = GetTickCount();
-	pj_status_t sendStatus = pjsua_acc_send_request(account, &uri, &method, NULL, request, NULL);
+	pj_status_t sendStatus = pjsua_acc_send_request(account, &uri, &method, NULL, request, &msgData);
 	free(uri.ptr);
 	free(method.ptr);
 	if (sendStatus != PJ_SUCCESS) {
 		delete request;
-		m_callTracePanel->Append(_T("SIP           NOT READY · OPTIONS send failed · ") + pj_error_text(sendStatus));
+		CString error = pj_error_text(sendStatus);
+		if (sendStatus == PJ_EINVAL) {
+			error = _T("PJ_EINVAL · ") + error;
+		}
+		m_callTracePanel->Append(_T("SIP           NOT READY · OPTIONS send failed · ") + error);
 		m_dialToneCheckPending = false;
 		SetDialToneSessionActive(false);
 		return;
