@@ -2,6 +2,7 @@
 #include "DarkControls.h"
 #include "DarkPalette.h"
 #include <uxtheme.h>
+#include <gdiplus.h>
 
 IMPLEMENT_DYNAMIC(CDarkComboBox, CComboBox)
 
@@ -359,8 +360,20 @@ void CDarkIconButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 	}
 	int x = rect.left + (rect.Width() - m_iconSize) / 2;
 	int y = rect.top + (rect.Height() - m_iconSize) / 2;
-	// DSS_MONO repaints the icon as a silhouette in the brush colour, so a dark glyph stays visible.
-	CBrush glyph(enabled ? DarkPalette::Text() : DarkPalette::DisabledText());
-	::DrawState(dc->m_hDC, (HBRUSH)glyph.GetSafeHandle(), NULL, (LPARAM)m_icon, 0,
-		x, y, m_iconSize, m_iconSize, DST_ICON | DSS_MONO);
+	// Preserve the resource's alpha/mask, but replace all of its RGB data.  DrawState's
+	// DSS_MONO path does not reliably recolour 32-bit alpha icons such as IDI_CONTACT.
+	COLORREF colour = enabled ? DarkPalette::Text() : DarkPalette::DisabledText();
+	Gdiplus::ColorMatrix matrix = {
+		0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0,
+		0, 0, 0, 1, 0,
+		GetRValue(colour) / 255.0f, GetGValue(colour) / 255.0f, GetBValue(colour) / 255.0f, 0, 1
+	};
+	Gdiplus::Bitmap bitmap(m_icon);
+	Gdiplus::ImageAttributes attributes;
+	attributes.SetColorMatrix(&matrix);
+	Gdiplus::Graphics graphics(dc->m_hDC);
+	graphics.DrawImage(&bitmap, Gdiplus::Rect(x, y, m_iconSize, m_iconSize),
+		0, 0, bitmap.GetWidth(), bitmap.GetHeight(), Gdiplus::UnitPixel, &attributes);
 }

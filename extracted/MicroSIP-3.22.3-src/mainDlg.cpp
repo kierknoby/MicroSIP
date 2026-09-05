@@ -210,9 +210,10 @@ public:
 
 	bool CreatePanel(CWnd* parent)
 	{
-		// WS_CLIPCHILDREN keeps the panel background erase from wiping the child controls.
+		// The panel overlaps the unused tail of the dialler page.  Clip both sibling
+		// windows so a later dialler repaint cannot cover this window's children.
 		if (!CreateEx(0, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL,
-			WS_CHILD | WS_CLIPCHILDREN, CRect(0, 0, 0, 0), parent, 0)) {
+			WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, CRect(0, 0, 0, 0), parent, 0)) {
 			return false;
 		}
 		LOGFONT lf;
@@ -3037,6 +3038,7 @@ BOOL CmainDlg::OnInitDialog()
 	CRect pageRect;
 
 	pageDialer = new Dialer(this);
+	pageDialer->ModifyStyle(0, WS_CLIPSIBLINGS);
 	tabItem.pszText = Translate(_T("Phone"));
 	tabItem.iImage = 0;
 	tabItem.lParam = (LPARAM)pageDialer;
