@@ -233,6 +233,8 @@ public:
 		recent.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_RECENT);
 		save.Create(Translate(_T("Save")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_SAVE);
+		undo.Create(Translate(_T("Undo")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+			CRect(0, 0, 0, 0), this, IDC_CALL_RECORD_UNDO);
 		clear.Create(Translate(_T("Clear")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 			CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_CLEAR);
 		traceMode.SetFont(parent->GetFont());
@@ -240,6 +242,7 @@ public:
 		current.SetFont(parent->GetFont());
 		recent.SetFont(parent->GetFont());
 		save.SetFont(parent->GetFont());
+		undo.SetFont(parent->GetFont());
 		clear.SetFont(parent->GetFont());
 		log.Create(WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_READONLY
 			| ES_AUTOVSCROLL | ES_LEFT, CRect(0, 0, 0, 0), this, IDC_CALL_TRACE_LOG);
@@ -254,6 +257,7 @@ public:
 		SetDarkMode(accountSettings.darkMode);
 		Reset();
 		RefreshRecent();
+		UpdateUndoState();
 		return true;
 	}
 
@@ -357,6 +361,7 @@ public:
 		notesMode.SetCheck(mode == 1 ? BST_CHECKED : BST_UNCHECKED);
 		ShowCurrent();
 		RefreshRecent();
+		UpdateUndoState();
 	}
 
 	void ShowCurrent()
@@ -374,6 +379,7 @@ public:
 			log.ShowWindow(SW_HIDE);
 			notes.ShowWindow(SW_SHOW);
 		}
+		UpdateUndoState();
 	}
 
 	void RefreshRecent()
@@ -430,6 +436,7 @@ public:
 		else {
 			notes.SetWindowText(all);
 		}
+		UpdateUndoState();
 	}
 
 	void Save()
@@ -474,6 +481,7 @@ public:
 		}
 		RefreshRecent();
 		ShowFeedback(FeedbackSave);
+		UpdateUndoState();
 	}
 
 	void SetDarkMode(bool enabled)
@@ -483,6 +491,7 @@ public:
 		notesMode.SetDarkMode(enabled);
 		current.SetDarkMode(enabled);
 		save.SetDarkMode(enabled);
+		undo.SetDarkMode(enabled);
 		clear.SetDarkMode(enabled);
 		recent.SetDarkMode(enabled);
 		notes.SetDarkMode(enabled);
@@ -509,17 +518,27 @@ public:
 		GetClientRect(&client);
 		int pad = MulDiv(4, dpiY, 96);
 		int headerHeight = MulDiv(18, dpiY, 96);
-		int buttonWidth = MulDiv(48, dpiY, 96);
+		int preferredButtonWidth = MulDiv(48, dpiY, 96);
 		int modeWidth = MulDiv(62, dpiY, 96);
 		traceMode.SetWindowPos(NULL, pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
 		notesMode.SetWindowPos(NULL, pad + modeWidth + pad, pad, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-		save.SetWindowPos(NULL, client.right - buttonWidth * 2 - pad * 3, pad, buttonWidth, headerHeight,
-			SWP_NOACTIVATE | SWP_NOZORDER);
-		clear.SetWindowPos(NULL, client.right - buttonWidth - pad, pad, buttonWidth, headerHeight,
-			SWP_NOACTIVATE | SWP_NOZORDER);
 		int recentTop = pad * 2 + headerHeight;
 		current.SetWindowPos(NULL, pad, recentTop, modeWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-		recent.SetWindowPos(NULL, pad + modeWidth + pad, recentTop, client.Width() - modeWidth - pad * 3, MulDiv(120, dpiY, 96), SWP_NOACTIVATE | SWP_NOZORDER);
+		int recentLeft = pad + modeWidth + pad;
+		int rowRight = client.right - pad;
+		int actionGap = pad;
+		int groupGap = pad * 2;
+		int minimumRecentWidth = MulDiv(52, dpiY, 96);
+		int available = max(0, rowRight - recentLeft);
+		int buttonWidth = min(preferredButtonWidth,
+			max(0, (available - groupGap - minimumRecentWidth - actionGap * 2) / 3));
+		int actionGroupWidth = buttonWidth * 3 + actionGap * 2;
+		int actionLeft = rowRight - actionGroupWidth;
+		int recentRight = max(recentLeft, actionLeft - groupGap);
+		recent.SetWindowPos(NULL, recentLeft, recentTop, recentRight - recentLeft, MulDiv(120, dpiY, 96), SWP_NOACTIVATE | SWP_NOZORDER);
+		save.SetWindowPos(NULL, actionLeft, recentTop, buttonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		undo.SetWindowPos(NULL, actionLeft + buttonWidth + actionGap, recentTop, buttonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+		clear.SetWindowPos(NULL, actionLeft + (buttonWidth + actionGap) * 2, recentTop, buttonWidth, headerHeight, SWP_NOACTIVATE | SWP_NOZORDER);
 		int logTop = recentTop + headerHeight + pad;
 		log.SetWindowPos(NULL, pad, logTop, client.Width() - pad * 2, max(0, client.bottom - logTop - pad),
 			SWP_NOACTIVATE | SWP_NOZORDER);
@@ -605,11 +624,20 @@ protected:
 			notes.SetWindowText(_T(""));
 			ShowFeedback(FeedbackClear);
 		}
+		UpdateUndoState();
 	}
 	afx_msg void OnTraceMode() { ShowMode(0); }
 	afx_msg void OnNotesMode() { ShowMode(1); }
 	afx_msg void OnCurrent() { ShowCurrent(); }
 	afx_msg void OnSave() { Save(); }
+	afx_msg void OnUndo()
+	{
+		if (mode == 1 && notes.SendMessage(EM_CANUNDO)) {
+			notes.SendMessage(EM_UNDO);
+		}
+		UpdateUndoState();
+	}
+	afx_msg void OnNotesUpdate() { UpdateUndoState(); }
 	afx_msg void OnRecentChange() { LoadRecent(); }
 	afx_msg void OnTraceScroll()
 	{
@@ -642,6 +670,13 @@ private:
 		KillTimer(IDT_CALL_TRACE_FEEDBACK);
 		save.ClearFlash();
 		clear.ClearFlash();
+	}
+
+	void UpdateUndoState()
+	{
+		if (::IsWindow(undo.m_hWnd)) {
+			undo.EnableWindow(mode == 1 && ::IsWindow(notes.m_hWnd) && notes.SendMessage(EM_CANUNDO));
+		}
 	}
 
 	void ResetPresentation()
@@ -874,6 +909,7 @@ private:
 	CButtonBottom current;
 	CDarkComboBox recent;
 	CButtonBottom save;
+	CButtonBottom undo;
 	CButtonBottom clear;
 	CRichEditCtrl log;
 	CPlaceholderEdit notes;
@@ -902,7 +938,9 @@ BEGIN_MESSAGE_MAP(CmainDlg::CCallTracePanel, CWnd)
 	ON_BN_CLICKED(IDC_CALL_NOTES_MODE, OnNotesMode)
 	ON_BN_CLICKED(IDC_CALL_RECORD_CURRENT, OnCurrent)
 	ON_BN_CLICKED(IDC_CALL_RECORD_SAVE, OnSave)
+	ON_BN_CLICKED(IDC_CALL_RECORD_UNDO, OnUndo)
 	ON_CBN_SELCHANGE(IDC_CALL_RECORD_RECENT, OnRecentChange)
+	ON_EN_UPDATE(IDC_CALL_NOTES_EDIT, OnNotesUpdate)
 	ON_EN_VSCROLL(IDC_CALL_TRACE_LOG, OnTraceScroll)
 END_MESSAGE_MAP()
 

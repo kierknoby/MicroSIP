@@ -1043,7 +1043,8 @@ void Dialer::SetDarkMode(bool enabled)
 {
 	m_ButtonCall.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
 	m_ButtonCall.m_TextColor = RGB(255, 255, 255);
-	m_ButtonDialTone.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
+	m_ButtonDialTone.m_FaceColor = m_dialToneSessionActive ? _GLOBAL_DIALER_END_COLOR
+		: (enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR);
 	m_ButtonDialTone.m_TextColor = RGB(255, 255, 255);
 	m_ButtonEnd.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_END_COLOR;
 	m_ButtonEnd.m_TextColor = RGB(255, 255, 255);
@@ -1606,7 +1607,10 @@ void Dialer::SetDialToneSessionActive(bool active)
 {
 	m_dialToneSessionActive = active;
 	m_ButtonDialTone.SetWindowText(Translate(active ? _T("Hang-Up") : _T("Dial-Tone")));
+	m_ButtonDialTone.m_FaceColor = active ? _GLOBAL_DIALER_END_COLOR
+		: (accountSettings.darkMode ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR);
 	UpdateCallButton();
+	m_ButtonDialTone.RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 
 void Dialer::Action(DialerActions action)
@@ -1640,7 +1644,7 @@ void Dialer::Action(DialerActions action)
 
 void Dialer::Clear(bool update, bool preserveQualification)
 {
-	mainDlg->StopDialTone(_T("Dial target cleared · READY left"), preserveQualification);
+	mainDlg->StopDialTone(L"Dial target cleared \x00B7 READY left", preserveQualification);
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	combobox->SetCurSel(-1);
 	if (update) {
@@ -1656,7 +1660,7 @@ void Dialer::OnBnClickedCall()
 void Dialer::OnBnClickedDialTone()
 {
 	if (m_dialToneSessionActive) {
-		mainDlg->StopDialTone(_T("Hang-Up pressed · Dial-Tone session ended"));
+		mainDlg->StopDialTone(L"Hang-Up pressed \x00B7 Dial-Tone session ended");
 	}
 	else {
 		mainDlg->BeginDialToneReadiness();
