@@ -65,6 +65,219 @@
 #define new DEBUG_NEW
 #endif
 
+static CString BrandingFolder()
+{
+	CString root = accountSettings.appDataRoaming;
+	root.TrimRight(_T("\\"));
+	return root + _T("\\freepbxUK\\Branding");
+}
+
+static CString BrandingLogoPath()
+{
+	if (accountSettings.brandingLogoFile.IsEmpty()
+		|| accountSettings.brandingLogoFile.FindOneOf(_T("\\/")) != -1) return CString();
+	return BrandingFolder() + _T("\\") + accountSettings.brandingLogoFile;
+}
+
+static bool LoadBitmapBytes(const BYTE* bytes, DWORD size, Gdiplus::Bitmap*& bitmap, IStream*& stream)
+{
+	bitmap = NULL;
+	stream = NULL;
+	if (!bytes || !size) return false;
+	HGLOBAL buffer = GlobalAlloc(GMEM_MOVEABLE, size);
+	if (!buffer) return false;
+	void* destination = GlobalLock(buffer);
+	if (!destination) { GlobalFree(buffer); return false; }
+	memcpy(destination, bytes, size);
+	GlobalUnlock(buffer);
+	if (CreateStreamOnHGlobal(buffer, TRUE, &stream) != S_OK) { GlobalFree(buffer); return false; }
+	bitmap = Gdiplus::Bitmap::FromStream(stream, FALSE);
+	if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+		delete bitmap; bitmap = NULL; stream->Release(); stream = NULL; return false;
+	}
+	return true;
+}
+
+static bool LoadBitmapResource(Gdiplus::Bitmap*& bitmap, IStream*& stream)
+{
+	HINSTANCE instance = AfxGetResourceHandle();
+	HRSRC resource = FindResource(instance, MAKEINTRESOURCE(IDR_FREEPBXUK_LOGO), RT_RCDATA);
+	if (!resource) return false;
+	HGLOBAL loaded = LoadResource(instance, resource);
+	return loaded && LoadBitmapBytes((const BYTE*)LockResource(loaded), SizeofResource(instance, resource), bitmap, stream);
+}
+
+static bool LoadBitmapFile(const CString& path, Gdiplus::Bitmap*& bitmap, IStream*& stream)
+{
+	CFile file;
+	if (!file.Open(path, CFile::modeRead | CFile::shareDenyNone)) return false;
+	ULONGLONG length = file.GetLength();
+	if (!length || length > MAXDWORD) { file.Close(); return false; }
+	CArray<BYTE, BYTE> bytes;
+	bytes.SetSize((INT_PTR)length);
+	UINT read = file.Read(bytes.GetData(), (UINT)length);
+	file.Close();
+	return read == length && LoadBitmapBytes(bytes.GetData(), (DWORD)length, bitmap, stream);
+}
+
+static bool ValidBrandingUrl(const CString& value)
+{
+	if (value.IsEmpty()) return true;
+	CString lower = value; lower.MakeLower();
+	if (lower.Find(_T("http://")) != 0 && lower.Find(_T("https://")) != 0) return false;
+	URL_COMPONENTS parts = { sizeof(parts) };
+	TCHAR host[INTERNET_MAX_HOST_NAME_LENGTH + 1] = { 0 };
+	parts.lpszHostName = host;
+	parts.dwHostNameLength = INTERNET_MAX_HOST_NAME_LENGTH;
+	return InternetCrackUrl(value, 0, 0, &parts) && parts.dwHostNameLength > 0
+		&& (parts.nScheme == INTERNET_SCHEME_HTTP || parts.nScheme == INTERNET_SCHEME_HTTPS);
+}
+
+class CBrandingDlg : public CDialog
+{
+public:
+	CBrandingDlg(CWnd* parent) : CDialog(IDD_BRANDING, parent), custom(accountSettings.brandingCustom), image(NULL), stream(NULL) {}
+	~CBrandingDlg() { ClearImage(); }
+
+protected:
+	BOOL OnInitDialog()
+	{
+		CDialog::OnInitDialog();
+		url = custom ? accountSettings.brandingUrl : _T("https://freepbx.uk");
+		SetDlgItemText(IDC_BRANDING_URL, url);
+		GetDlgItem(IDC_BRANDING_URL)->EnableWindow(custom);
+		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(!custom);
+		LoadPreview(custom ? BrandingLogoPath() : CString(), !custom);
+		BOOL dark = accountSettings.darkMode;
+		DwmSetWindowAttribute(m_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+		for (CWnd* child = GetWindow(GW_CHILD); child; child = child->GetNextWindow())
+			SetWindowTheme(child->m_hWnd, accountSettings.darkMode ? L"DarkMode_Explorer" : NULL, NULL);
+		return TRUE;
+	}
+
+	void ClearImage() { delete image; image = NULL; if (stream) { stream->Release(); stream = NULL; } }
+	bool LoadPreview(const CString& path, bool bundled = false)
+	{
+		ClearImage();
+		bool loaded = bundled ? LoadBitmapResource(image, stream) : (!path.IsEmpty() && LoadBitmapFile(path, image, stream));
+		if (::IsWindow(m_hWnd)) GetDlgItem(IDC_BRANDING_PREVIEW)->Invalidate();
+		return loaded;
+	}
+
+	afx_msg void OnDrawItem(int controlId, LPDRAWITEMSTRUCT item)
+	{
+		if (controlId != IDC_BRANDING_PREVIEW) { CDialog::OnDrawItem(controlId, item); return; }
+		Gdiplus::Graphics graphics(item->hDC);
+		COLORREF background = accountSettings.darkMode ? DarkPalette::Window() : GetSysColor(COLOR_3DFACE);
+		graphics.Clear(Gdiplus::Color(255, GetRValue(background), GetGValue(background), GetBValue(background)));
+		int clientWidth = item->rcItem.right - item->rcItem.left;
+		int clientHeight = item->rcItem.bottom - item->rcItem.top;
+		const int horizontalMargin = MulDiv(16, dpiY, 96);
+		const int verticalPadding = MulDiv(8, dpiY, 96);
+		const int logoDisplayHeight = max(0, clientHeight - verticalPadding * 2);
+		const int availableWidth = max(0, clientWidth - horizontalMargin * 2);
+		if (image) {
+			const UINT sourceWidth = image->GetWidth(), sourceHeight = image->GetHeight();
+			double scale = sourceHeight ? (double)logoDisplayHeight / sourceHeight : 0.0;
+			if (sourceWidth && sourceWidth * scale > availableWidth) scale = (double)availableWidth / sourceWidth;
+			int width = (int)(sourceWidth * scale), height = (int)(sourceHeight * scale);
+			int left = (clientWidth - width) / 2, top = verticalPadding + (logoDisplayHeight - height) / 2;
+			if (width > 0 && height > 0) {
+				graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+				graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
+			}
+		}
+		else {
+			Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(9, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+			Gdiplus::SolidBrush brush(accountSettings.darkMode ? Gdiplus::Color(255, 190, 196, 202) : Gdiplus::Color(255, 100, 100, 100));
+			Gdiplus::StringFormat format; format.SetAlignment(Gdiplus::StringAlignmentCenter); format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+			graphics.DrawString(L"Custom logo unavailable", -1, &font, Gdiplus::RectF(0, 0, (Gdiplus::REAL)clientWidth, (Gdiplus::REAL)clientHeight), &format, &brush);
+		}
+	}
+
+	afx_msg void OnChangeLogo()
+	{
+		CFileDialog picker(TRUE, NULL, NULL, OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
+			_T("Images (*.png;*.jpg;*.jpeg;*.gif;*.bmp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp|All files (*.*)|*.*||"), this);
+		if (picker.DoModal() != IDOK) return;
+		Gdiplus::Bitmap* test = NULL; IStream* testStream = NULL;
+		if (!LoadBitmapFile(picker.GetPathName(), test, testStream)) { AfxMessageBox(_T("The selected image could not be loaded."), MB_ICONERROR); return; }
+		delete test; testStream->Release();
+		custom = true;
+		stagedSource = picker.GetPathName();
+		url.Empty();
+		SetDlgItemText(IDC_BRANDING_URL, _T(""));
+		GetDlgItem(IDC_BRANDING_URL)->EnableWindow(TRUE);
+		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(FALSE);
+		LoadPreview(stagedSource);
+	}
+
+	afx_msg void OnRestoreDefault()
+	{
+		custom = false; stagedSource.Empty(); url = _T("https://freepbx.uk");
+		SetDlgItemText(IDC_BRANDING_URL, url); GetDlgItem(IDC_BRANDING_URL)->EnableWindow(FALSE);
+		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(TRUE);
+		LoadPreview(CString(), true);
+	}
+
+	void OnOK()
+	{
+		GetDlgItemText(IDC_BRANDING_URL, url);
+		if (custom && !ValidBrandingUrl(url)) { AfxMessageBox(_T("Enter a valid http:// or https:// URL, or leave it blank."), MB_ICONERROR); GetDlgItem(IDC_BRANDING_URL)->SetFocus(); return; }
+		CString oldPath = BrandingLogoPath(), newFile = accountSettings.brandingLogoFile;
+		if (custom && !stagedSource.IsEmpty()) {
+			CString folder = BrandingFolder();
+			CString parent = folder.Left(folder.ReverseFind(_T('\\')));
+			if ((!CreateDirectory(parent, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+				|| (!CreateDirectory(folder, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)) { AfxMessageBox(_T("Unable to create the Branding folder."), MB_ICONERROR); return; }
+			int dot = stagedSource.ReverseFind(_T('.'));
+			CString extension = dot == -1 ? CString(_T(".img")) : stagedSource.Mid(dot);
+			if (extension.GetLength() > 10 || extension.FindOneOf(_T("\\/:*?\"<>|")) != -1) extension = _T(".img");
+			newFile = _T("logo") + extension;
+			CString finalPath = folder + _T("\\") + newFile, pendingPath = folder + _T("\\logo.pending") + extension;
+			DeleteFile(pendingPath);
+			if (!CopyFile(stagedSource, pendingPath, FALSE) || !MoveFileEx(pendingPath, finalPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) { DeleteFile(pendingPath); AfxMessageBox(_T("Unable to save the custom logo."), MB_ICONERROR); return; }
+		}
+		accountSettings.brandingCustom = custom;
+		accountSettings.brandingUrl = custom ? url : CString();
+		accountSettings.brandingLogoFile = custom ? newFile : CString();
+		accountSettings.SettingsSave();
+		if (!oldPath.IsEmpty() && oldPath.CompareNoCase(BrandingLogoPath()) != 0) DeleteFile(oldPath);
+		CDialog::OnOK();
+	}
+
+	afx_msg BOOL OnEraseBkgnd(CDC* dc)
+	{
+		if (!accountSettings.darkMode) return CDialog::OnEraseBkgnd(dc);
+		CRect rect; GetClientRect(&rect); dc->FillSolidRect(rect, DarkPalette::Window()); return TRUE;
+	}
+	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd* child, UINT type)
+	{
+		if (accountSettings.darkMode) {
+			static CBrush panel(DarkPalette::Window()), input(DarkPalette::Input());
+			dc->SetTextColor(DarkPalette::Text());
+			if (type == CTLCOLOR_EDIT) { dc->SetBkColor(DarkPalette::Input()); return input; }
+			if (type == CTLCOLOR_STATIC || type == CTLCOLOR_DLG) { dc->SetBkColor(DarkPalette::Window()); return panel; }
+		}
+		return CDialog::OnCtlColor(dc, child, type);
+	}
+
+	DECLARE_MESSAGE_MAP()
+private:
+	bool custom;
+	CString url, stagedSource;
+	Gdiplus::Bitmap* image;
+	IStream* stream;
+};
+
+BEGIN_MESSAGE_MAP(CBrandingDlg, CDialog)
+	ON_WM_DRAWITEM()
+	ON_WM_ERASEBKGND()
+	ON_WM_CTLCOLOR()
+	ON_BN_CLICKED(IDC_BRANDING_CHANGE, OnChangeLogo)
+	ON_BN_CLICKED(IDC_BRANDING_RESTORE, OnRestoreDefault)
+END_MESSAGE_MAP()
+
 class CmainDlg::CFreepbxFooter : public CWnd
 {
 public:
@@ -77,31 +290,16 @@ public:
 		}
 	}
 
-	bool LoadImageResource()
+	bool LoadBranding()
 	{
-		HINSTANCE instance = AfxGetResourceHandle();
-		HRSRC resource = FindResource(instance, MAKEINTRESOURCE(IDR_FREEPBXUK_LOGO), RT_RCDATA);
-		if (!resource) {
-			return false;
-		}
-		HGLOBAL loaded = LoadResource(instance, resource);
-		DWORD size = SizeofResource(instance, resource);
-		if (!loaded || !size) {
-			return false;
-		}
-		HGLOBAL buffer = GlobalAlloc(GMEM_MOVEABLE, size);
-		if (!buffer) {
-			return false;
-		}
-		void* destination = GlobalLock(buffer);
-		memcpy(destination, LockResource(loaded), size);
-		GlobalUnlock(buffer);
-		if (CreateStreamOnHGlobal(buffer, TRUE, &stream) != S_OK) {
-			GlobalFree(buffer);
-			return false;
-		}
-		image = Gdiplus::Bitmap::FromStream(stream, FALSE);
-		return image && image->GetLastStatus() == Gdiplus::Ok;
+		delete image; image = NULL;
+		if (stream) { stream->Release(); stream = NULL; }
+		logoUrl = accountSettings.brandingCustom ? accountSettings.brandingUrl : _T("https://freepbx.uk");
+		bool loaded = accountSettings.brandingCustom
+			? LoadBitmapFile(BrandingLogoPath(), image, stream)
+			: LoadBitmapResource(image, stream);
+		logoClickable = loaded && !logoUrl.IsEmpty() && ValidBrandingUrl(logoUrl);
+		return loaded;
 	}
 
 protected:
@@ -114,25 +312,29 @@ protected:
 		Gdiplus::Graphics graphics(dc.m_hDC);
 		COLORREF background = accountSettings.darkMode ? DarkPalette::Window() : GetSysColor(COLOR_3DFACE);
 		graphics.Clear(Gdiplus::Color(255, GetRValue(background), GetGValue(background), GetBValue(background)));
-		if (!image) {
-			return;
-		}
 		const int horizontalMargin = MulDiv(16, dpiY, 96);
 		const int verticalPadding = MulDiv(8, dpiY, 96);
 		const int contentGap = MulDiv(4, dpiY, 96);
 		const int attributionHeight = MulDiv(12, dpiY, 96);
 		Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(8, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-		double scale = min(
-			(double)(client.Width() - horizontalMargin * 2) / image->GetWidth(),
-			(double)(client.Height() - verticalPadding * 2 - contentGap - attributionHeight) / image->GetHeight());
-		scale = min(1.0, max(0.0, scale));
-		int width = (int)(image->GetWidth() * scale);
-		int height = (int)(image->GetHeight() * scale);
+		const int logoDisplayHeight = max(0,
+			client.Height() - verticalPadding * 2 - contentGap - attributionHeight);
+		const int availableWidth = max(0, client.Width() - horizontalMargin * 2);
+		const UINT sourceWidth = image ? image->GetWidth() : 0;
+		const UINT sourceHeight = image ? image->GetHeight() : 0;
+		double scale = sourceHeight ? (double)logoDisplayHeight / sourceHeight : 0.0;
+		if (sourceWidth && sourceWidth * scale > availableWidth) {
+			scale = (double)availableWidth / sourceWidth;
+		}
+		int width = (int)(sourceWidth * scale);
+		int height = (int)(sourceHeight * scale);
 		int left = (client.Width() - width) / 2;
-		int top = verticalPadding;
-		freepbxLinkRect = CRect(left, top, left + width, top + height);
-		graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-		graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
+		int top = verticalPadding + (logoDisplayHeight - height) / 2;
+		freepbxLinkRect = logoClickable ? CRect(left, top, left + width, top + height) : CRect(0, 0, 0, 0);
+		if (width > 0 && height > 0) {
+			graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+			graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
+		}
 
 		Gdiplus::SolidBrush textBrush(accountSettings.darkMode ? Gdiplus::Color(255, 190, 196, 202) : Gdiplus::Color(255, 100, 100, 100));
 		Gdiplus::SolidBrush linkBrush(Gdiplus::Color(255, 40, 90, 150));
@@ -149,7 +351,7 @@ protected:
 		suffixWidth = measured.Width;
 		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth;
 		Gdiplus::REAL textX = (Gdiplus::REAL)((client.Width() - textWidth) / 2);
-		Gdiplus::REAL textY = (Gdiplus::REAL)(top + height + contentGap);
+		Gdiplus::REAL textY = (Gdiplus::REAL)(verticalPadding + logoDisplayHeight + contentGap);
 		graphics.DrawString(prefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
 		textX += prefixWidth;
 		microsipLinkRect = CRect((int)textX, (int)textY, (int)(textX + linkWidth), (int)(textY + MulDiv(12, dpiY, 96)));
@@ -159,8 +361,8 @@ protected:
 	}
 	afx_msg void OnLButtonUp(UINT nFlags, CPoint point)
 	{
-		if (freepbxLinkRect.PtInRect(point)) {
-			ShellExecute(NULL, _T("open"), _T("https://freepbx.uk"), NULL, NULL, SW_SHOWNORMAL);
+		if (logoClickable && freepbxLinkRect.PtInRect(point)) {
+			ShellExecute(NULL, _T("open"), logoUrl, NULL, NULL, SW_SHOWNORMAL);
 		}
 		else if (microsipLinkRect.PtInRect(point)) {
 			ShellExecute(NULL, _T("open"), _T("https://www.microsip.org/"), NULL, NULL, SW_SHOWNORMAL);
@@ -172,7 +374,7 @@ protected:
 		CPoint point;
 		GetCursorPos(&point);
 		ScreenToClient(&point);
-		if (freepbxLinkRect.PtInRect(point) || microsipLinkRect.PtInRect(point)) {
+		if ((logoClickable && freepbxLinkRect.PtInRect(point)) || microsipLinkRect.PtInRect(point)) {
 			if (!handCursor) {
 				handCursor = LoadCursor(NULL, IDC_HAND);
 			}
@@ -189,6 +391,8 @@ private:
 	CRect freepbxLinkRect;
 	CRect microsipLinkRect;
 	HCURSOR handCursor;
+	CString logoUrl;
+	bool logoClickable = false;
 };
 
 BEGIN_MESSAGE_MAP(CmainDlg::CFreepbxFooter, CWnd)
@@ -2832,6 +3036,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_COMMAND(ID_SHORTCUTS, OnMenuShortcuts)
 	ON_COMMAND(ID_ALWAYS_ON_TOP, OnMenuAlwaysOnTop)
 	ON_COMMAND(ID_DARK_MODE, OnMenuDarkMode)
+	ON_COMMAND(ID_BRANDING, OnMenuBranding)
 	ON_COMMAND(ID_LOG, OnMenuLog)
 	ON_COMMAND(ID_EXIT, OnMenuExit)
 	ON_NOTIFY(TCN_SELCHANGE, IDC_MAIN_TAB, &CmainDlg::OnTcnSelchangeTab)
@@ -3113,7 +3318,7 @@ BOOL CmainDlg::OnInitDialog()
 	RepositionBars(AFX_IDW_CONTROLBAR_FIRST, AFX_IDW_CONTROLBAR_LAST, IDS_STATUSBAR);
 	m_freepbxFooter = new CFreepbxFooter();
 	m_freepbxFooter->CreateEx(0, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL, WS_CHILD | WS_VISIBLE, CRect(0, 0, 0, 0), this, 0);
-	m_freepbxFooter->LoadImageResource();
+	m_freepbxFooter->LoadBranding();
 	m_callTracePanel = new CCallTracePanel();
 	m_callTracePanel->CreatePanel(this);
 
@@ -3535,6 +3740,15 @@ void CmainDlg::OnMenuDarkMode()
 	ApplyDarkMode();
 }
 
+void CmainDlg::OnMenuBranding()
+{
+	CBrandingDlg dialog(this);
+	if (dialog.DoModal() == IDOK && m_freepbxFooter) {
+		m_freepbxFooter->LoadBranding();
+		m_freepbxFooter->RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+	}
+}
+
 // All trace emitters run on the UI thread from already-marshalled call data.
 void CmainDlg::CallTraceOnCallState(pjsua_call_info* call_info)
 {
@@ -3833,6 +4047,7 @@ void CmainDlg::MainPopupMenu(bool isMenuButton)
         }
         tracker->AppendMenu(MF_STRING | (accountSettings.alwaysOnTop ? MF_CHECKED : 0), ID_ALWAYS_ON_TOP, Translate(_T("Always on Top")));
 		tracker->AppendMenu(MF_STRING | (accountSettings.darkMode ? MF_CHECKED : 0), ID_DARK_MODE, Translate(_T("Dark Mode")));
+		tracker->AppendMenu(MF_STRING, ID_BRANDING, _T("Branding..."));
 			if (!separator) {
 				tracker->AppendMenu(MF_SEPARATOR);
 				separator = true;

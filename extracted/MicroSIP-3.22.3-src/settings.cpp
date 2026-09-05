@@ -802,6 +802,17 @@ void AccountSettings::Init()
     darkMode = _wtoi(str);
 
     ptr = str.GetBuffer(255);
+    GetPrivateProfileString(section, _T("brandingState"), _T("DEFAULT"), ptr, 256, iniFile);
+    str.ReleaseBuffer();
+    brandingCustom = str.CompareNoCase(_T("CUSTOM")) == 0;
+    ptr = brandingUrl.GetBuffer(2047);
+    GetPrivateProfileString(section, _T("brandingUrl"), NULL, ptr, 2048, iniFile);
+    brandingUrl.ReleaseBuffer();
+    ptr = brandingLogoFile.GetBuffer(MAX_PATH - 1);
+    GetPrivateProfileString(section, _T("brandingLogoFile"), NULL, ptr, MAX_PATH, iniFile);
+    brandingLogoFile.ReleaseBuffer();
+
+    ptr = str.GetBuffer(255);
     GetPrivateProfileString(section, _T("enableShortcuts"), NULL, ptr, 256, iniFile);
     str.ReleaseBuffer();
     enableShortcuts = _wtoi(str);
@@ -1257,6 +1268,9 @@ void AccountSettings::SettingsSave()
     str.Format(_T("%d"), alwaysOnTop);
     WritePrivateProfileString(section, _T("alwaysOnTop"), str, iniFile);
     WritePrivateProfileString(section, _T("darkMode"), darkMode ? _T("1") : _T("0"), iniFile);
+    WritePrivateProfileString(section, _T("brandingState"), brandingCustom ? _T("CUSTOM") : _T("DEFAULT"), iniFile);
+    WritePrivateProfileString(section, _T("brandingUrl"), brandingUrl, iniFile);
+    WritePrivateProfileString(section, _T("brandingLogoFile"), brandingLogoFile, iniFile);
 
     WritePrivateProfileString(section, _T("enableShortcuts"), enableShortcuts ? _T("1") : _T("0"), iniFile);
     WritePrivateProfileString(section, _T("shortcutsBottom"), shortcutsBottom ? _T("1") : _T("0"), iniFile);

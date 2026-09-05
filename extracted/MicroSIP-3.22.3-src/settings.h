@@ -106,6 +106,9 @@ struct AccountSettings {
 	int activeTab;
 	bool alwaysOnTop;
 	bool darkMode;
+	bool brandingCustom;
+	CString brandingUrl;
+	CString brandingLogoFile;
 	bool multiMonitor;
 	bool networkChanges;
 

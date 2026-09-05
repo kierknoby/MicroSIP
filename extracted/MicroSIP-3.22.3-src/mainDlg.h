@@ -286,6 +286,7 @@ public:
 	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
 	afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);
 	afx_msg void OnMenuDarkMode();
+	afx_msg void OnMenuBranding();
 	afx_msg LRESULT onShellHookMessage(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallAnswer(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallHangup(WPARAM wParam,LPARAM lParam);
