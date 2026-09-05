@@ -141,6 +141,7 @@ public:
 	void SetCheckDND(bool checked);
 	void SetCheckREC(bool checked);
 	void EnableButtonCONF(bool enabled);
+	int GetVisibleControlsBottom() const;
 
 protected:
 	CToolTipCtrl m_ToolTip;

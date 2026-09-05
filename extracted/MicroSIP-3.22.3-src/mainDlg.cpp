@@ -6672,7 +6672,7 @@ void CmainDlg::LayoutFreepbxFooter()
 	LayoutCallTracePanel();
 }
 
-// Uses the blank region below the dialler page and above the footer.
+// Uses the region below the lowest visible dialler control and above the footer.
 void CmainDlg::LayoutCallTracePanel()
 {
 	if (!m_callTracePanel || !::IsWindow(m_callTracePanel->m_hWnd) || !m_freepbxFooter
@@ -6683,17 +6683,17 @@ void CmainDlg::LayoutCallTracePanel()
 		m_callTracePanel->ShowWindow(SW_HIDE);
 		return;
 	}
-	CRect client;
 	CRect page;
 	CRect footer;
-	GetClientRect(&client);
 	pageDialer->GetWindowRect(&page);
 	ScreenToClient(&page);
 	m_freepbxFooter->GetWindowRect(&footer);
 	ScreenToClient(&footer);
-	int gap = MulDiv(10, dpiY, 96);
-	int top = page.bottom + gap;
-	int height = footer.top - gap - top;
+	int topGap = MulDiv(6, dpiY, 96);
+	int footerGap = MulDiv(10, dpiY, 96);
+	int controlsBottom = pageDialer->GetVisibleControlsBottom();
+	int top = (controlsBottom > 0 ? controlsBottom : page.bottom) + topGap;
+	int height = footer.top - footerGap - top;
 	if (height < MulDiv(60, dpiY, 96)) {
 		m_callTracePanel->ShowWindow(SW_HIDE);
 		return;
@@ -7597,6 +7597,7 @@ void CmainDlg::OnAccountChanged(bool init)
 		pageDialer->RebuildButtons();
 	}
 	pageDialer->UpdateAccountIdentity();
+	LayoutCallTracePanel();
 }
 
 void CmainDlg::OpenTransferDlg(CWnd * pParent, msip_action action, pjsua_call_id call_id, Contact * selectedContact)

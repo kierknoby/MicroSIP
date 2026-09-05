@@ -985,6 +985,25 @@ void Dialer::RebuildButtons(bool init)
 	}
 }
 
+int Dialer::GetVisibleControlsBottom() const
+{
+	CWnd* parent = GetParent();
+	if (!parent || !::IsWindow(m_hWnd)) {
+		return 0;
+	}
+	int bottom = 0;
+	for (HWND child = ::GetWindow(m_hWnd, GW_CHILD); child; child = ::GetWindow(child, GW_HWNDNEXT)) {
+		if (!::IsWindowVisible(child)) {
+			continue;
+		}
+		CRect rect;
+		::GetWindowRect(child, &rect);
+		parent->ScreenToClient(&rect);
+		bottom = max(bottom, (int)rect.bottom);
+	}
+	return bottom;
+}
+
 void Dialer::UpdateAccountIdentity()
 {
 	if (!IsChild(&m_AccountIdentity)) {
