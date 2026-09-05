@@ -5766,6 +5766,8 @@ void CmainDlg::AppBarApplyPosition()
 	data.hWnd = m_hWnd;
 	data.uEdge = m_appBarEdge;
 	data.rc = dockMonitor;
+	data.rc.top = monitorInfo.rcWork.top;
+	data.rc.bottom = monitorInfo.rcWork.bottom;
 	if (m_appBarEdge == ABE_LEFT) {
 		data.rc.right = data.rc.left + visibleWidth;
 	}
@@ -5793,6 +5795,7 @@ void CmainDlg::AppBarApplyPosition()
 	SetWindowPos(NULL, data.rc.left - leftInset, data.rc.top - topInset,
 		m_lockedWindowWidth, (data.rc.bottom - data.rc.top) + topInset + bottomInset,
 		SWP_NOACTIVATE | SWP_NOZORDER);
+	AlignVisibleFrameVertically(data.rc);
 	m_appBarPositioning = false;
 
 	APPBARDATA changed = { sizeof(APPBARDATA) };
@@ -5820,6 +5823,24 @@ void CmainDlg::AppBarRemove()
 	UINT_PTR removed = SHAppBarMessage(ABM_REMOVE, &data);
 	PJ_LOG(3, (THIS_FILENAME, "AppBar ABM_REMOVE returned: %u", (unsigned)removed));
 	m_appBarRegistered = false;
+}
+
+void CmainDlg::AlignVisibleFrameVertically(const CRect& targetRect)
+{
+	CRect windowRect;
+	CRect visibleRect;
+	GetWindowRect(&windowRect);
+	if (FAILED(DwmGetWindowAttribute(m_hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visibleRect, sizeof(visibleRect)))) {
+		return;
+	}
+	int deltaTop = targetRect.top - visibleRect.top;
+	int deltaBottom = targetRect.bottom - visibleRect.bottom;
+	if (!deltaTop && !deltaBottom) {
+		return;
+	}
+	SetWindowPos(NULL, windowRect.left, windowRect.top + deltaTop,
+		windowRect.Width(), windowRect.Height() + deltaBottom - deltaTop,
+		SWP_NOACTIVATE | SWP_NOZORDER);
 }
 
 void CmainDlg::SnapMainWindowToWorkArea()
@@ -5864,6 +5885,7 @@ void CmainDlg::SnapMainWindowToWorkArea()
 	m_snappingMainWindow = true;
 	SetWindowPos(NULL, targetLeft, targetTop, windowRect.Width(), targetHeight,
 		SWP_NOACTIVATE | SWP_NOZORDER);
+	AlignVisibleFrameVertically(monitorInfo.rcWork);
 	m_snappingMainWindow = false;
 	accountSettings.mainX = targetLeft;
 	accountSettings.mainY = targetTop;

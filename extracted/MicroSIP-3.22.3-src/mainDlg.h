@@ -169,6 +169,7 @@ public:
 	void AccountSettingsPendingSave();
 	void SnapMainWindowToWorkArea();
 	void ApplyDarkMode();
+	void AlignVisibleFrameVertically(const CRect& targetRect);
 	void AppBarUpdateDock(bool allowDockChange);
 	void AppBarRemove();
 	void AppBarApplyPosition();
