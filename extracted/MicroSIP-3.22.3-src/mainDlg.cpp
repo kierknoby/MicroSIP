@@ -2071,7 +2071,9 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_WM_TIMER()
 	ON_WM_MOVE()
 	ON_WM_SIZE()
+	ON_WM_SHOWWINDOW()
 	ON_WM_EXITSIZEMOVE()
+	ON_WM_ENTERSIZEMOVE()
 	ON_WM_MOVING()
 	ON_WM_GETMINMAXINFO()
 	ON_WM_WINDOWPOSCHANGING()
@@ -2205,6 +2207,7 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	m_snappingMainWindow = false;
 	m_lockedWindowWidth = 0;
 	m_appBarRegistered = false;
+	m_docked = false;
 	m_appBarEdge = ABE_LEFT;
 	m_appBarPositioning = false;
 	m_appBarMonitor.SetRectEmpty();
@@ -5580,6 +5583,13 @@ void CmainDlg::OnSize(UINT type, int w, int h)
 {
 	CBaseDialog::OnSize(type, w, h);
 	LayoutFreepbxFooter();
+	if (type == SIZE_MINIMIZED) {
+		// Free the reserved strip while hidden; the logical dock edge is kept for restore.
+		AppBarRemove();
+	}
+	else if (type == SIZE_RESTORED && m_docked && !m_appBarRegistered) {
+		AppBarUpdateDock(false);
+	}
 	if (this->IsWindowVisible() && type == SIZE_RESTORED) {
 		CRect cRect;
 		GetWindowRect(&cRect);
@@ -5597,10 +5607,29 @@ void CmainDlg::OnMoving(UINT side, LPRECT rect)
 	m_dragValid = true;
 }
 
+// Hiding to the tray does not raise SIZE_MINIMIZED, so release/restore the dock here too.
+void CmainDlg::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+	CBaseDialog::OnShowWindow(bShow, nStatus);
+	if (!bShow) {
+		AppBarRemove();
+	}
+	else if (m_docked && !m_appBarRegistered) {
+		AppBarUpdateDock(false);
+	}
+}
+
+// Release the reservation the instant a drag starts; Windows clips window
+// dragging to rcWork, which would otherwise still exclude our own strip.
+void CmainDlg::OnEnterSizeMove()
+{
+	AppBarRemove();
+}
+
 void CmainDlg::OnExitSizeMove()
 {
 	AppBarUpdateDock(true);
-	if (!m_appBarRegistered) {
+	if (!m_docked) {
 		SnapMainWindowToWorkArea();
 	}
 }
@@ -5681,13 +5710,15 @@ void CmainDlg::AppBarUpdateDock(bool allowDockChange)
 			dockThreshold, (int)dockLeft, (int)dockRight));
 		if (!dockLeft && !dockRight) {
 			AppBarRemove();
+			m_docked = false;
 			m_appBarMonitor.SetRectEmpty();
 			return;
 		}
 		m_appBarEdge = dockLeft ? ABE_LEFT : ABE_RIGHT;
 		m_appBarMonitor = monitorInfo.rcMonitor;
+		m_docked = true;
 	}
-	else if (!m_appBarRegistered) {
+	else if (!m_docked) {
 		return;
 	}
 

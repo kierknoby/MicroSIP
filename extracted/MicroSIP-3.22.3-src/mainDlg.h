@@ -96,6 +96,7 @@ public:
 	bool m_snappingMainWindow;
 	int m_lockedWindowWidth;
 	bool m_appBarRegistered;
+	bool m_docked;
 	UINT m_appBarEdge;
 	bool m_appBarPositioning;
 	CRect m_appBarMonitor;
@@ -255,6 +256,8 @@ public:
 	void LayoutFreepbxFooter();
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnSize(UINT type, int w, int h);
+	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
+	afx_msg void OnEnterSizeMove();
 	afx_msg void OnExitSizeMove();
 	afx_msg void OnMoving(UINT side, LPRECT rect);
 	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
