@@ -623,12 +623,16 @@ private:
 		int length = log.GetWindowTextLength();
 		int timestampLength = line.GetLength() - eventLength;
 		log.SetSel(length, length);
-		CHARFORMAT2 timestamp = { sizeof(CHARFORMAT2) };
+		CHARFORMAT2 timestamp;
+		memset(&timestamp, 0, sizeof(timestamp));
+		timestamp.cbSize = sizeof(CHARFORMAT2);
 		timestamp.dwMask = CFM_COLOR;
 		timestamp.crTextColor = darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120);
 		log.SetSelectionCharFormat(timestamp);
 		log.ReplaceSel(line.Left(timestampLength));
-		CHARFORMAT2 event = { sizeof(CHARFORMAT2) };
+		CHARFORMAT2 event;
+		memset(&event, 0, sizeof(event));
+		event.cbSize = sizeof(CHARFORMAT2);
 		event.dwMask = CFM_COLOR;
 		event.crTextColor = darkMode ? DarkPalette::Text() : GetSysColor(COLOR_WINDOWTEXT);
 		log.SetSelectionCharFormat(event);
@@ -639,7 +643,9 @@ private:
 	{
 		CString text;
 		log.GetWindowText(text);
-		CHARFORMAT2 timestamp = { sizeof(CHARFORMAT2) };
+		CHARFORMAT2 timestamp;
+		memset(&timestamp, 0, sizeof(timestamp));
+		timestamp.cbSize = sizeof(CHARFORMAT2);
 		timestamp.dwMask = CFM_COLOR;
 		timestamp.crTextColor = darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120);
 		int start = 0;
