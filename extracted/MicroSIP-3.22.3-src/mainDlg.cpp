@@ -2072,6 +2072,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_WM_MOVE()
 	ON_WM_SIZE()
 	ON_WM_EXITSIZEMOVE()
+	ON_WM_MOVING()
 	ON_WM_GETMINMAXINFO()
 	ON_WM_WINDOWPOSCHANGING()
 	ON_WM_CLOSE()
@@ -2206,6 +2207,9 @@ CmainDlg::CmainDlg(CWnd * pParent /*=NULL*/)
 	m_appBarRegistered = false;
 	m_appBarEdge = ABE_LEFT;
 	m_appBarPositioning = false;
+	m_appBarMonitor.SetRectEmpty();
+	m_dragWindowRect.SetRectEmpty();
+	m_dragValid = false;
 	m_callTracePanel = NULL;
 	m_callTraceCallId = PJSUA_INVALID_ID;
 
@@ -5585,6 +5589,14 @@ void CmainDlg::OnSize(UINT type, int w, int h)
 	}
 }
 
+// Aero Snap can reposition the HWND before WM_EXITSIZEMOVE, so remember where the user actually dragged.
+void CmainDlg::OnMoving(UINT side, LPRECT rect)
+{
+	CBaseDialog::OnMoving(side, rect);
+	m_dragWindowRect = *rect;
+	m_dragValid = true;
+}
+
 void CmainDlg::OnExitSizeMove()
 {
 	AppBarUpdateDock(true);
@@ -5640,10 +5652,6 @@ void CmainDlg::AppBarUpdateDock(bool allowDockChange)
 	if (!::IsWindow(m_hWnd) || !m_lockedWindowWidth || m_appBarPositioning) {
 		return;
 	}
-	MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
-	if (!GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
-		return;
-	}
 	if (allowDockChange) {
 		CRect windowRect;
 		CRect visibleRect;
@@ -5651,14 +5659,33 @@ void CmainDlg::AppBarUpdateDock(bool allowDockChange)
 		if (FAILED(DwmGetWindowAttribute(m_hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visibleRect, sizeof(visibleRect)))) {
 			visibleRect = windowRect;
 		}
-		int threshold = MulDiv(18, dpiY, 96);
-		bool dockLeft = abs(visibleRect.left - monitorInfo.rcMonitor.left) <= threshold;
-		bool dockRight = abs(monitorInfo.rcMonitor.right - visibleRect.right) <= threshold;
+		int leftInset = visibleRect.left - windowRect.left;
+		int rightInset = windowRect.right - visibleRect.right;
+		CRect releaseRect = visibleRect;
+		if (m_dragValid) {
+			releaseRect.left = m_dragWindowRect.left + leftInset;
+			releaseRect.right = m_dragWindowRect.right - rightInset;
+		}
+		m_dragValid = false;
+
+		MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+		if (!GetMonitorInfo(MonitorFromRect(&releaseRect, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+			return;
+		}
+		int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+		int dockThreshold = monitorWidth * 5 / 100;
+		bool dockLeft = releaseRect.left <= monitorInfo.rcMonitor.left + dockThreshold;
+		bool dockRight = releaseRect.right >= monitorInfo.rcMonitor.right - dockThreshold;
+		PJ_LOG(3, (THIS_FILENAME, "AppBar dock test: releaseVisible l=%ld r=%ld monitor l=%ld r=%ld threshold=%d left=%d right=%d",
+			releaseRect.left, releaseRect.right, monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.right,
+			dockThreshold, (int)dockLeft, (int)dockRight));
 		if (!dockLeft && !dockRight) {
 			AppBarRemove();
+			m_appBarMonitor.SetRectEmpty();
 			return;
 		}
 		m_appBarEdge = dockLeft ? ABE_LEFT : ABE_RIGHT;
+		m_appBarMonitor = monitorInfo.rcMonitor;
 	}
 	else if (!m_appBarRegistered) {
 		return;
@@ -5700,11 +5727,14 @@ void CmainDlg::AppBarApplyPosition()
 	int bottomInset = windowRect.bottom - visibleRect.bottom;
 	int visibleWidth = m_lockedWindowWidth - leftInset - rightInset;
 
+	// The HWND may still sit at an Aero Snap position, so dock against the monitor chosen at release.
+	CRect dockMonitor = m_appBarMonitor.IsRectEmpty() ? CRect(monitorInfo.rcMonitor) : m_appBarMonitor;
+
 	// Reserve using full monitor bounds so our own reservation is never fed back in.
 	APPBARDATA data = { sizeof(APPBARDATA) };
 	data.hWnd = m_hWnd;
 	data.uEdge = m_appBarEdge;
-	data.rc = monitorInfo.rcMonitor;
+	data.rc = dockMonitor;
 	if (m_appBarEdge == ABE_LEFT) {
 		data.rc.right = data.rc.left + visibleWidth;
 	}

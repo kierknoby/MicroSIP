@@ -98,6 +98,9 @@ public:
 	bool m_appBarRegistered;
 	UINT m_appBarEdge;
 	bool m_appBarPositioning;
+	CRect m_appBarMonitor;
+	CRect m_dragWindowRect;
+	bool m_dragValid;
 
 	CString callIdIncomingIgnore;
 	CList<int,int> toneCalls;
@@ -253,6 +256,7 @@ public:
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnSize(UINT type, int w, int h);
 	afx_msg void OnExitSizeMove();
+	afx_msg void OnMoving(UINT side, LPRECT rect);
 	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
 	afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);
 	afx_msg void OnMenuDarkMode();
