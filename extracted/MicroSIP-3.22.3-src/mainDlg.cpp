@@ -524,6 +524,17 @@ public:
 			SWP_NOACTIVATE | SWP_NOZORDER);
 	}
 
+	// The children keep WS_VISIBLE while the panel is hidden, so showing the panel does not invalidate them.
+	void ShowPanel()
+	{
+		BOOL wasVisible = IsWindowVisible();
+		ShowWindow(SW_SHOW);
+		LayoutChildren();
+		if (!wasVisible) {
+			RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+		}
+	}
+
 protected:
 	afx_msg BOOL OnEraseBkgnd(CDC* dc)
 	{
@@ -6445,8 +6456,7 @@ void CmainDlg::LayoutCallTracePanel()
 	}
 	m_callTracePanel->SetWindowPos(&wndTop, page.left, top, page.Width(), height,
 		SWP_NOACTIVATE);
-	m_callTracePanel->ShowWindow(SW_SHOW);
-	m_callTracePanel->LayoutChildren();
+	m_callTracePanel->ShowPanel();
 }
 
 void CmainDlg::SetupJumpList()

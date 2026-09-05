@@ -291,3 +291,76 @@ void CPlaceholderEdit::OnPaint()
 		dc.SelectObject(oldFont);
 	}
 }
+
+IMPLEMENT_DYNAMIC(CDarkIconButton, CButton)
+
+BEGIN_MESSAGE_MAP(CDarkIconButton, CButton)
+END_MESSAGE_MAP()
+
+CDarkIconButton::CDarkIconButton()
+{
+	m_icon = NULL;
+	m_iconSize = 16;
+	m_darkMode = false;
+}
+
+void CDarkIconButton::SetButtonIcon(HICON icon)
+{
+	m_icon = icon;
+	ICONINFO info = { 0 };
+	if (icon && ::GetIconInfo(icon, &info)) {
+		BITMAP bitmap = { 0 };
+		HBITMAP source = info.hbmColor ? info.hbmColor : info.hbmMask;
+		if (source && ::GetObject(source, sizeof(bitmap), &bitmap) && bitmap.bmWidth > 0) {
+			m_iconSize = bitmap.bmWidth;
+		}
+		if (info.hbmColor) {
+			::DeleteObject(info.hbmColor);
+		}
+		if (info.hbmMask) {
+			::DeleteObject(info.hbmMask);
+		}
+	}
+	if (::IsWindow(m_hWnd)) {
+		SetIcon(icon);
+	}
+}
+
+void CDarkIconButton::SetDarkMode(bool enabled)
+{
+	m_darkMode = enabled;
+	if (!::IsWindow(m_hWnd)) {
+		return;
+	}
+	if (enabled) {
+		ModifyStyle(BS_TYPEMASK, BS_OWNERDRAW);
+	}
+	else {
+		ModifyStyle(BS_TYPEMASK, BS_PUSHBUTTON | BS_ICON);
+		SetIcon(m_icon);
+	}
+	Invalidate();
+}
+
+void CDarkIconButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
+{
+	CDC* dc = CDC::FromHandle(lpDIS->hDC);
+	if (!dc) {
+		return;
+	}
+	CRect rect(lpDIS->rcItem);
+	bool pressed = (lpDIS->itemState & ODS_SELECTED) != 0;
+	bool enabled = (lpDIS->itemState & ODS_DISABLED) == 0;
+	dc->FillSolidRect(rect, pressed ? DarkPalette::Selected() : DarkPalette::Surface());
+	CBrush border(DarkPalette::Border());
+	dc->FrameRect(rect, &border);
+	if (!m_icon) {
+		return;
+	}
+	int x = rect.left + (rect.Width() - m_iconSize) / 2;
+	int y = rect.top + (rect.Height() - m_iconSize) / 2;
+	// DSS_MONO repaints the icon as a silhouette in the brush colour, so a dark glyph stays visible.
+	CBrush glyph(enabled ? DarkPalette::Text() : DarkPalette::DisabledText());
+	::DrawState(dc->m_hDC, (HBRUSH)glyph.GetSafeHandle(), NULL, (LPARAM)m_icon, 0,
+		x, y, m_iconSize, m_iconSize, DST_ICON | DSS_MONO);
+}

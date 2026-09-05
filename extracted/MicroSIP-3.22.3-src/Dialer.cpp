@@ -977,7 +977,7 @@ void Dialer::RebuildButtons(bool init)
 		switchRect.right = switchRect.left + switchWidth;
 		m_AccountSwitch.Create(_T(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON | BS_ICON, switchRect, this, IDC_DIALER_ACCOUNT_SWITCH);
 		m_AccountSwitch.SetFont(GetFont());
-		m_AccountSwitch.SetIcon(LoadImageIcon(IDI_CONTACT, 16, 16));
+		m_AccountSwitch.SetButtonIcon(LoadImageIcon(IDI_CONTACT, 16, 16));
 		if (m_ToolTip) {
 			m_ToolTip.AddTool(&m_AccountSwitch, Translate(_T("Switch account")));
 		}
@@ -1055,6 +1055,7 @@ void Dialer::SetDarkMode(bool enabled)
 	m_ButtonMessage.SetDarkMode(enabled);
 	m_ComboNumber.SetDarkMode(enabled);
 	LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
+	m_AccountSwitch.SetDarkMode(enabled);
 	SetWindowTheme(m_AccountSwitch.m_hWnd, theme, NULL);
 	SetWindowTheme(GetDlgItem(IDC_BUTTON_MUTE_OUTPUT)->m_hWnd, theme, NULL);
 	SetWindowTheme(GetDlgItem(IDC_BUTTON_MUTE_INPUT)->m_hWnd, theme, NULL);

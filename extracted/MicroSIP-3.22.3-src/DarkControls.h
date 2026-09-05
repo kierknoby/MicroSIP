@@ -60,3 +60,22 @@ protected:
 	afx_msg void OnChange();
 	DECLARE_MESSAGE_MAP()
 };
+
+// Icon push button that takes over drawing only in dark mode; light mode stays fully native.
+class CDarkIconButton : public CButton
+{
+	DECLARE_DYNAMIC(CDarkIconButton)
+
+public:
+	CDarkIconButton();
+	void SetButtonIcon(HICON icon);
+	void SetDarkMode(bool enabled);
+
+protected:
+	HICON m_icon;
+	int m_iconSize;
+	bool m_darkMode;
+
+	virtual void DrawItem(LPDRAWITEMSTRUCT lpDIS);
+	DECLARE_MESSAGE_MAP()
+};

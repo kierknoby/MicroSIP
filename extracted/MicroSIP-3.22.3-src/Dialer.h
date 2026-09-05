@@ -64,7 +64,7 @@ class Dialer :
 	CButtonBottom m_ButtonSpkClock;
 	CButtonBottom m_ButtonEchoTest;
 	CButtonBottom m_ButtonCallTrace;
-	CButton m_AccountSwitch;
+	CDarkIconButton m_AccountSwitch;
 	CStatic m_AccountIdentity;
 	CAccountSidecar* m_accountSidecar;
 	HICON m_hIconMuteOutput;
