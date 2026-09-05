@@ -124,13 +124,9 @@ BOOL MessagesDlg::OnInitDialog()
 
 	TranslateDialog(this->m_hWnd);
 
-#ifndef _GLOBAL_VIDEO
+	// The call window remains the audio-call controller; text chat is not exposed in this fork.
+	GetDlgItem(IDC_MESSAGE)->ShowWindow(SW_HIDE);
 	GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
-#else
-	if (accountSettings.disableVideo) {
-		GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
-	}
-#endif
 
 	CFont* font = this->GetFont();
 	LOGFONT lf;
@@ -226,7 +222,6 @@ BEGIN_MESSAGE_MAP(MessagesDlg, CBaseDialog)
 	ON_MESSAGE(WM_CONTEXTMENU, OnContextMenu)
 	ON_MESSAGE(UM_CLOSETAB, &MessagesDlg::OnCloseTab)
 	ON_BN_CLICKED(IDC_CALL_END, &MessagesDlg::OnBnClickedCallEnd)
-	ON_BN_CLICKED(IDC_VIDEO_CALL, &MessagesDlg::OnBnClickedVideoCall)
 	ON_BN_CLICKED(IDC_TRANSFER, &MessagesDlg::OnBnClickedTransfer)
 	ON_BN_CLICKED(IDC_CONFERENCE, &MessagesDlg::OnBnClickedConference)
 	ON_COMMAND(ID_TRANSFER, OnTransfer)
@@ -1032,12 +1027,7 @@ void MessagesDlg::UpdateCallButton(BOOL active, pjsua_call_info *call_info, call
 		GetDlgItem(IDC_CALL_END)->ShowWindow(SW_SHOW);
 	}
 #ifdef _GLOBAL_VIDEO
-	if (accountSettings.disableVideo) {
-		GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
-	}
-	else {
-		GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(active ? SW_HIDE : SW_SHOW);
-	}
+	GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
 #endif
 	GetDlgItem(IDC_END)->ShowWindow(!active ? SW_HIDE : SW_SHOW);
 	UpdateHoldButton(call_info);
@@ -1159,6 +1149,7 @@ bool MessagesDlg::CallCheck()
 
 void MessagesDlg::Call(BOOL hasVideo)
 {
+	hasVideo = FALSE;
 	if (CallCheck()) {
 		MessagesContact* messagesContact = GetMessageContact();
 		call_user_data *user_data = new call_user_data(PJSUA_INVALID_ID);

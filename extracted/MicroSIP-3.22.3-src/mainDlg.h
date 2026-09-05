@@ -176,6 +176,8 @@ public:
 	void AppBarRemove();
 	void AppBarApplyPosition();
 	void LayoutCallTracePanel();
+	void BeginDialToneReadiness();
+	void StopDialTone();
 	void CallTraceOnCallState(pjsua_call_info* call_info);
 	void CallTraceOnMediaState(pjsua_call_info* call_info);
 	void CallTraceOnIdentityChange(pjsua_call_id call_id);
@@ -218,6 +220,10 @@ protected:
 	int m_idleCounter;
 	pjrpid_activity m_PresenceStatus;
 	bool newMessages;
+	unsigned m_dialToneGeneration;
+	int m_dialToneBaseState;
+	CString m_dialToneServer;
+	CString m_dialToneTransport;
 		
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnDestroy();
@@ -232,6 +238,7 @@ protected:
 	afx_msg LRESULT onCreateRingingDlg(WPARAM, LPARAM);
 	afx_msg LRESULT onRefreshLevels(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onRegState2(WPARAM wParam,LPARAM lParam);
+	afx_msg LRESULT onDialToneOptions(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT onCallState(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onIncomingCall(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onMWIInfo(WPARAM wParam,LPARAM lParam);

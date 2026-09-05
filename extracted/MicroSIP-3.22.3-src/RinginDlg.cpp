@@ -71,9 +71,7 @@ BOOL RinginDlg::OnInitDialog() {
 	AutoMove(IDC_IGNORE, 0, 100, 0, 0);
 
 #ifdef _GLOBAL_VIDEO
-	if (accountSettings.disableVideo) {
-		GetDlgItem(IDC_VIDEO)->ShowWindow(SW_HIDE);
-	}
+	GetDlgItem(IDC_VIDEO)->ShowWindow(SW_HIDE);
 #endif
 	
 	TranslateDialog(this->m_hWnd);
@@ -203,7 +201,6 @@ BEGIN_MESSAGE_MAP(RinginDlg, CBaseDialog)
 	ON_BN_CLICKED(IDCANCEL, &RinginDlg::OnBnClickedCancel)
 	ON_BN_CLICKED(IDC_ANSWER, &RinginDlg::OnBnClickedAudio)
 	ON_BN_CLICKED(IDC_DECLINE, &RinginDlg::OnBnClickedDecline)
-	ON_BN_CLICKED(IDC_VIDEO, &RinginDlg::OnBnClickedVideo)
 	ON_BN_CLICKED(IDC_TRANSFER, OnBnClickedTransfer)
 END_MESSAGE_MAP()
 
@@ -288,6 +285,7 @@ void RinginDlg::OnBnClickedVideo()
 
 void RinginDlg::CallAccept(BOOL hasVideo)
 {
+	hasVideo = FALSE;
 	if (!answered) {
 		mainDlg->onCallAnswer((WPARAM)call_id, (LPARAM)hasVideo);
 	}

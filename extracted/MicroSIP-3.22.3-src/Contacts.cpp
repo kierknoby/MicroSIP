@@ -137,7 +137,6 @@ BEGIN_MESSAGE_MAP(Contacts, CBaseDialog)
 	ON_COMMAND(ID_CALL, OnMenuCall)
 	ON_COMMAND(ID_CALL_PHONE, OnMenuCallPhone)
 	ON_COMMAND(ID_CALL_MOBILE, OnMenuCallMobile)
-	ON_COMMAND(ID_CHAT, OnMenuChat)
 	ON_COMMAND(ID_ADD, OnMenuAdd)
 	ON_COMMAND(ID_EDIT, OnMenuEdit)
 	ON_COMMAND(ID_COPY, OnMenuCopy)
@@ -146,9 +145,6 @@ BEGIN_MESSAGE_MAP(Contacts, CBaseDialog)
 	ON_COMMAND(ID_EXPORT, OnMenuExport)
 	ON_MESSAGE(WM_CONTEXTMENU, OnContextMenu)
 	ON_NOTIFY(NM_DBLCLK, IDC_CONTACTS, &Contacts::OnNMDblclkContacts)
-#ifdef _GLOBAL_VIDEO
-	ON_COMMAND(ID_VIDEOCALL, OnMenuCallVideo)
-#endif
 END_MESSAGE_MAP()
 
 void Contacts::OnTimer(UINT_PTR TimerVal)
@@ -228,22 +224,7 @@ void Contacts::DefaultItemAction(int i)
 			mainDlg->OpenTransferDlg(mainDlg, MSIP_ACTION_TRANSFER, PJSUA_INVALID_ID, contact);
 		}
 		else {
-			if (accountSettings.defaultAction.IsEmpty()) {
-				MessageDlgOpen(accountSettings.singleMode);
-			}
-			else {
-				if (accountSettings.defaultAction == _T("call")) {
-					OnMenuCall();
-				}
-#ifdef _GLOBAL_VIDEO
-				else if (accountSettings.defaultAction == _T("video")) {
-					OnMenuCallVideo();
-				}
-#endif
-				else {
-					OnMenuChat();
-				}
-			}
+			OnMenuCall();
 		}
 	}
 }
@@ -375,13 +356,9 @@ LRESULT Contacts::OnContextMenu(WPARAM wParam, LPARAM lParam)
 		tracker->AppendMenu(MF_STRING, ID_IMPORT, Translate(_T("Import")));
 		tracker->AppendMenu(MF_STRING, ID_EXPORT, Translate(_T("Export")));
 #ifdef _GLOBAL_VIDEO
-		if (accountSettings.disableVideo) {
-			tracker->RemoveMenu(ID_VIDEOCALL, MF_BYCOMMAND);
-		}
+		tracker->RemoveMenu(ID_VIDEOCALL, MF_BYCOMMAND);
 #endif
-		if (accountSettings.disableMessaging) {
-			tracker->RemoveMenu(ID_CHAT, MF_BYCOMMAND);
-		}
+		tracker->RemoveMenu(ID_CHAT, MF_BYCOMMAND);
 		if (tracker->GetMenuItemCount() == 3) {
 			tracker->RemoveMenu(0, MF_BYPOSITION);
 		}

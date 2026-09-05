@@ -91,6 +91,7 @@ public:
 	CButtonBottom m_ButtonRec;
 	CButtonBottom m_ButtonConf;
 
+	CButtonEx m_ButtonDialTone;
 	CButtonEx m_ButtonCall;
 	//CMFCButton m_ButtonCall;
 	CButtonEx m_ButtonEnd;
@@ -98,7 +99,6 @@ public:
 #ifdef _GLOBAL_VIDEO
 	CButtonBottom m_ButtonVideoCall;
 #endif
-	CButtonBottom m_ButtonMessage;
 	CDarkComboBox m_ComboNumber;
 
 	bool m_isButtonVoicemailVisible;
@@ -172,11 +172,11 @@ public:
 	afx_msg void OnBnClickedVoicemail();
 
 	afx_msg void OnBnClickedCall();
+	afx_msg void OnBnClickedDialTone();
 	afx_msg void OnBnClickedDTMF();
 #ifdef _GLOBAL_VIDEO
 	afx_msg void OnBnClickedVideoCall();
 #endif
-	afx_msg void OnBnClickedMessage();
 	afx_msg void OnBnClickedHold();
 	afx_msg void OnBnClickedTransfer();
 	afx_msg void OnBnClickedEnd();

@@ -382,6 +382,83 @@ struct call_tonegen_data* call_init_tonegen(pjsua_call_id call_id)
 	return cd;
 }
 
+static call_tonegen_data* dialTone = NULL;
+
+pj_status_t dial_tone_start()
+{
+	dial_tone_stop();
+	if (!is_pjsua_running()) {
+		return PJ_EINVALIDOP;
+	}
+	pj_pool_t* pool = pjsua_pool_create("dial_tone", 512, 512);
+	if (!pool) {
+		return PJ_ENOMEM;
+	}
+	call_tonegen_data* tone = PJ_POOL_ZALLOC_T(pool, call_tonegen_data);
+	tone->pool = pool;
+	tone->toneslot = PJSUA_INVALID_ID;
+	pj_status_t status = pjmedia_tonegen_create(pool, 8000, 1, 160, 16, 0, &tone->tonegen);
+	if (status == PJ_SUCCESS) {
+		status = pjsua_conf_add_port(pool, tone->tonegen, &tone->toneslot);
+	}
+	if (status == PJ_SUCCESS) {
+		pjmedia_tone_desc ukTone;
+		pj_bzero(&ukTone, sizeof(ukTone));
+		ukTone.freq1 = 350;
+		ukTone.freq2 = 450;
+		// One second contains a whole number of cycles at both frequencies, so the loop joins cleanly.
+		ukTone.on_msec = 1000;
+		ukTone.volume = 6000;
+		status = pjmedia_tonegen_play(tone->tonegen, 1, &ukTone, PJMEDIA_TONEGEN_LOOP);
+	}
+	if (status == PJ_SUCCESS) {
+		pjsua_conf_adjust_rx_level(tone->toneslot, 0.0f);
+		status = pjsua_conf_connect(tone->toneslot, 0);
+	}
+	if (status != PJ_SUCCESS) {
+		if (tone->toneslot != PJSUA_INVALID_ID) {
+			pjsua_conf_remove_port(tone->toneslot);
+		}
+		if (tone->tonegen) {
+			pjmedia_port_destroy(tone->tonegen);
+		}
+		pj_pool_release(pool);
+		return status;
+	}
+	dialTone = tone;
+	// A short gain ramp supplements PJMEDIA's tone fade and avoids a click at the sound-device boundary.
+	for (int step = 1; step <= 4; ++step) {
+		pjsua_conf_adjust_rx_level(tone->toneslot, 0.15f * step);
+		Sleep(5);
+	}
+	return PJ_SUCCESS;
+}
+
+void dial_tone_stop()
+{
+	call_tonegen_data* tone = dialTone;
+	dialTone = NULL;
+	if (!tone) {
+		return;
+	}
+	if (is_pjsua_running()) {
+		for (int step = 3; step >= 0; --step) {
+			pjsua_conf_adjust_rx_level(tone->toneslot, 0.15f * step);
+			Sleep(5);
+		}
+		pjmedia_tonegen_stop(tone->tonegen);
+		pjsua_conf_disconnect(tone->toneslot, 0);
+		pjsua_conf_remove_port(tone->toneslot);
+	}
+	pjmedia_port_destroy(tone->tonegen);
+	pj_pool_release(tone->pool);
+}
+
+bool dial_tone_is_active()
+{
+	return dialTone != NULL;
+}
+
 
 static UINT_PTR destroyDTMFPlayerTimer = NULL;
 static UINT_PTR tonegenBusyTimer = NULL;

@@ -162,16 +162,12 @@ BEGIN_MESSAGE_MAP(Calls, CBaseDialog)
 	ON_EN_CHANGE(IDC_FILER_VALUE, OnFilterValueChange)
 	ON_WM_CTLCOLOR()
 	ON_COMMAND(ID_CALL, OnMenuCall)
-	ON_COMMAND(ID_CHAT, OnMenuChat)
 	ON_COMMAND(ID_ADD, OnMenuAdd)
 	ON_COMMAND(ID_COPY, OnMenuCopy)
 	ON_COMMAND(ID_DELETE, OnMenuDelete)
 	ON_COMMAND(ID_EXPORT, OnMenuExport)
 	ON_NOTIFY(NM_DBLCLK, IDC_CALLS, &Calls::OnNMDblclkCalls)
 	ON_MESSAGE(WM_CONTEXTMENU, OnContextMenu)
-#ifdef _GLOBAL_VIDEO
-	ON_COMMAND(ID_VIDEOCALL, OnMenuCallVideo)
-#endif
 END_MESSAGE_MAP()
 
 BOOL Calls::PreTranslateMessage(MSG* pMsg)
@@ -231,22 +227,7 @@ void Calls::OnBnClickedOk()
 
 void Calls::DefaultItemAction(int i)
 {
-	if (accountSettings.defaultAction.IsEmpty()) {
-		MessageDlgOpen(accountSettings.singleMode);
-	}
-	else {
-		if (accountSettings.defaultAction == _T("call")) {
-			OnMenuCall();
-		}
-#ifdef _GLOBAL_VIDEO
-		else if (accountSettings.defaultAction == _T("video")) {
-			OnMenuCallVideo();
-		}
-#endif
-		else {
-			OnMenuChat();
-		}
-	}
+	OnMenuCall();
 }
 
 void Calls::OnBnClickedCancel()
@@ -369,13 +350,9 @@ LRESULT Calls::OnContextMenu(WPARAM wParam, LPARAM lParam)
 			tracker->AppendMenu(0, MF_SEPARATOR);
 			tracker->AppendMenu(MF_STRING, ID_EXPORT, Translate(_T("Export")));
 #ifdef _GLOBAL_VIDEO
-			if (accountSettings.disableVideo) {
-				tracker->RemoveMenu(ID_VIDEOCALL, MF_BYCOMMAND);
-			}
+			tracker->RemoveMenu(ID_VIDEOCALL, MF_BYCOMMAND);
 #endif
-			if (accountSettings.disableMessaging) {
-				tracker->RemoveMenu(ID_CHAT, MF_BYCOMMAND);
-			}
+			tracker->RemoveMenu(ID_CHAT, MF_BYCOMMAND);
 			if (tracker->GetMenuItemCount() == 3) {
 				tracker->RemoveMenu(0, MF_BYPOSITION);
 			}

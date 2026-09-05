@@ -83,6 +83,8 @@ enum EUserWndMessages
 	UM_DBLCLICKTAB,
 	UM_QUERYTAB,
 	UM_UPDATE_CHECKER_LOADED,
+	UM_DIAL_TONE_OPTIONS,
+	IDT_TIMER_DIAL_TONE_OPTIONS,
 
 };
 
@@ -407,6 +409,9 @@ CString get_public_addr(Account *account = NULL);
 struct call_tonegen_data *call_init_tonegen(pjsua_call_id call_id);
 BOOL call_play_digit(pjsua_call_id call_id, const char *digits, int duration = 160);
 void call_deinit_tonegen(pjsua_call_id call_id);
+pj_status_t dial_tone_start();
+void dial_tone_stop();
+bool dial_tone_is_active();
 void destroyDTMFPlayerTimerHandler(
   HWND hwnd,
   UINT uMsg,

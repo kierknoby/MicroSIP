@@ -244,7 +244,7 @@ void Dialer::DoDataExchange(CDataExchange* pDX)
 #ifdef _GLOBAL_VIDEO
 	DDX_Control(pDX, IDC_VIDEO_CALL, m_ButtonVideoCall);
 #endif
-	DDX_Control(pDX, IDC_MESSAGE, m_ButtonMessage);
+	DDX_Control(pDX, IDC_MESSAGE, m_ButtonDialTone);
 }
 
 void Dialer::RebuildShortcutsRestart()
@@ -594,14 +594,24 @@ BOOL Dialer::OnInitDialog()
 	AutoMove(IDC_KEY_GRATE, 67, height3, 33, height);
 	AutoMove(IDC_CLEAR, 67, height4, 33, height);
 
+	// Chat and video are not exposed in this fork; the hero row is two equal actions.
 #ifdef _GLOBAL_VIDEO
-	AutoMove(IDC_VIDEO_CALL, 0, 85, 14, 15);
-	AutoMove(IDC_CALL, 14, 85, 72, 15);
-	AutoMove(IDC_MESSAGE, 86, 85, 14, 15);
-#else
-	AutoMove(IDC_CALL, 0, 85, 84, 15);
-	AutoMove(IDC_MESSAGE, 84, 85, 16, 15);
+	GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
 #endif
+	CRect heroRect;
+	CRect dialerClient;
+	m_ButtonCall.GetWindowRect(&heroRect);
+	ScreenToClient(&heroRect);
+	GetClientRect(&dialerClient);
+	heroRect.left = MulDiv(4, dpiY, 96);
+	heroRect.right = dialerClient.right - MulDiv(4, dpiY, 96);
+	int heroMiddle = heroRect.left + heroRect.Width() / 2;
+	m_ButtonDialTone.SetWindowPos(NULL, heroRect.left, heroRect.top,
+		heroMiddle - heroRect.left, heroRect.Height(), SWP_NOACTIVATE | SWP_NOZORDER);
+	m_ButtonCall.SetWindowPos(NULL, heroMiddle, heroRect.top,
+		heroRect.right - heroMiddle, heroRect.Height(), SWP_NOACTIVATE | SWP_NOZORDER);
+	AutoMove(IDC_MESSAGE, 0, 85, 50, 15);
+	AutoMove(IDC_CALL, 50, 85, 50, 15);
 
 	AutoMove(IDC_END, 14, 85, 72, 15);
 	AutoMove(IDC_HOLD, 0, 85, 14, 15);
@@ -651,10 +661,16 @@ BOOL Dialer::OnInitDialog()
 
 	m_ButtonCall.m_FaceColor = _GLOBAL_DIALER_CALL_COLOR;
 	m_ButtonCall.m_TextColor = RGB(255, 255, 255);
+	m_ButtonDialTone.m_FaceColor = _GLOBAL_DIALER_CALL_COLOR;
+	m_ButtonDialTone.m_TextColor = RGB(255, 255, 255);
 	m_ButtonEnd.m_FaceColor = _GLOBAL_DIALER_END_COLOR;
 	m_ButtonEnd.m_TextColor = RGB(255, 255, 255);
 	m_ButtonEnd.EnableWindow(m_ButtonEnd.IsWindowEnabled());
 	m_ButtonCall.SetFont(&m_font_call);
+	m_ButtonDialTone.SetFont(&m_font_call);
+	m_ButtonDialTone.ModifyStyle(BS_ICON, BS_PUSHBUTTON);
+	m_ButtonDialTone.SetWindowText(Translate(_T("Dial-Tone")));
+	m_ButtonDialTone.EnableWindow(TRUE);
 	m_ButtonEnd.SetFont(&m_font_call);
 	m_ButtonEnd.ShowWindow(SW_HIDE);
 	m_ButtonEnd.EnableWindow(TRUE);
@@ -681,13 +697,6 @@ BOOL Dialer::OnInitDialog()
 	((CButton*)GetDlgItem(IDC_HOLD))->SetIcon(m_hIconHold);
 	m_hIconTransfer = LoadImageIcon(IDI_TRANSFER, 16, 16);
 	((CButton*)GetDlgItem(IDC_TRANSFER))->SetIcon(m_hIconTransfer);
-#ifdef _GLOBAL_VIDEO
-	m_hIconVideo = LoadImageIcon(IDI_VIDEO, 16, 16);
-	m_ButtonVideoCall.SetImage(m_hIconVideo, FALSE);
-#endif
-	m_hIconMessage = LoadImageIcon(IDI_MESSAGE, 16, 16);
-	m_ButtonMessage.SetImage(m_hIconMessage, FALSE);
-
 	UpdateCallButton();
 
 return TRUE;
@@ -706,6 +715,7 @@ int Dialer::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
 void Dialer::OnDestroy()
 {
+	mainDlg->StopDialTone();
 	KillTimer(IDT_TIMER_VU_METER);
 	CBaseDialog::OnDestroy();
 }
@@ -741,11 +751,8 @@ BEGIN_MESSAGE_MAP(Dialer, CBaseDialog)
 	ON_WM_MOUSEMOVE()
 
 	ON_BN_CLICKED(IDC_CALL, OnBnClickedCall)
+	ON_BN_CLICKED(IDC_MESSAGE, OnBnClickedDialTone)
 	ON_BN_CLICKED(IDC_DIALER_DTMF, OnBnClickedDTMF)
-#ifdef _GLOBAL_VIDEO
-	ON_BN_CLICKED(IDC_VIDEO_CALL, OnBnClickedVideoCall)
-#endif
-	ON_BN_CLICKED(IDC_MESSAGE, OnBnClickedMessage)
 	ON_BN_CLICKED(IDC_HOLD, OnBnClickedHold)
 	ON_BN_CLICKED(IDC_TRANSFER, OnBnClickedTransfer)
 	ON_BN_CLICKED(IDC_END, OnBnClickedEnd)
@@ -1035,10 +1042,13 @@ void Dialer::SetDarkMode(bool enabled)
 {
 	m_ButtonCall.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
 	m_ButtonCall.m_TextColor = RGB(255, 255, 255);
+	m_ButtonDialTone.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_CALL_COLOR;
+	m_ButtonDialTone.m_TextColor = RGB(255, 255, 255);
 	m_ButtonEnd.m_FaceColor = enabled ? DarkPalette::Surface() : _GLOBAL_DIALER_END_COLOR;
 	m_ButtonEnd.m_TextColor = RGB(255, 255, 255);
 	// CButtonEx only pushes its colours into CMFCButton from EnableWindow.
 	m_ButtonCall.EnableWindow(m_ButtonCall.IsWindowEnabled());
+	m_ButtonDialTone.EnableWindow(m_ButtonDialTone.IsWindowEnabled());
 	m_ButtonEnd.EnableWindow(m_ButtonEnd.IsWindowEnabled());
 	m_ButtonDND.SetDarkMode(enabled);
 	m_ButtonFWD.SetDarkMode(enabled);
@@ -1049,10 +1059,6 @@ void Dialer::SetDarkMode(bool enabled)
 	m_ButtonSpkClock.SetDarkMode(enabled);
 	m_ButtonEchoTest.SetDarkMode(enabled);
 	m_ButtonCallTrace.SetDarkMode(enabled);
-#ifdef _GLOBAL_VIDEO
-	m_ButtonVideoCall.SetDarkMode(enabled);
-#endif
-	m_ButtonMessage.SetDarkMode(enabled);
 	m_ComboNumber.SetDarkMode(enabled);
 	LPCWSTR theme = enabled ? L"DarkMode_Explorer" : NULL;
 	m_AccountSwitch.SetDarkMode(enabled);
@@ -1434,6 +1440,9 @@ void Dialer::SetDTMF(CString digits)
 
 void Dialer::Input(CString digits, BOOL disableDTMF)
 {
+	if (!digits.IsEmpty()) {
+		mainDlg->StopDialTone();
+	}
 	if (!disableDTMF) {
 		DTMF(digits);
 	}
@@ -1507,6 +1516,9 @@ void Dialer::DialedAdd(CString number)
 
 void Dialer::SetNumber(CString  number, int callsCount)
 {
+	if (!number.IsEmpty()) {
+		mainDlg->StopDialTone();
+	}
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	CString old;
 	combobox->GetWindowText(old);
@@ -1522,16 +1534,19 @@ void Dialer::UpdateCallButton(BOOL forse, int callsCount)
 	int len;
 	if (!forse) {
 		CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
-		len = combobox->GetWindowTextLength();
+		CString target;
+		combobox->GetWindowText(target);
+		target.Trim();
+		len = target.GetLength();
 	}
 	else {
 		len = 1;
 	}
+	if (callsCount == -1) {
+		callsCount = mainDlg->messagesDlg->GetCallsCount();
+	}
 	bool state = false;
 	if (accountSettings.singleMode) {
-		if (callsCount == -1) {
-			callsCount = mainDlg->messagesDlg->GetCallsCount();
-		}
 		bool isEndVisisble = false;
 		WINDOWINFO wndInfo;
 		m_ButtonEnd.GetWindowInfo(&wndInfo);
@@ -1556,13 +1571,10 @@ void Dialer::UpdateCallButton(BOOL forse, int callsCount)
 				m_ButtonEnd.ShowWindow(SW_HIDE);
 
 				m_ButtonCall.ShowWindow(SW_SHOW);
-#ifdef _GLOBAL_VIDEO
-				GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_SHOW);
-#endif
 				GetDlgItem(IDC_MESSAGE)->ShowWindow(SW_SHOW);
 			}
 		}
-		state = callsCount || len ? true : false;
+		state = len ? true : false;
 
 	}
 	else {
@@ -1570,19 +1582,10 @@ void Dialer::UpdateCallButton(BOOL forse, int callsCount)
 	}
 	m_ButtonCall.EnableWindow(state);
 #ifdef _GLOBAL_VIDEO
-	if (accountSettings.disableVideo) {
-		GetDlgItem(IDC_VIDEO_CALL)->EnableWindow(false);
-	}
-	else {
-		GetDlgItem(IDC_VIDEO_CALL)->EnableWindow(state);
-	}
+	GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
+	GetDlgItem(IDC_VIDEO_CALL)->EnableWindow(FALSE);
 #endif
-	if (accountSettings.disableMessaging) {
-		GetDlgItem(IDC_MESSAGE)->EnableWindow(false);
-	}
-	else {
-		GetDlgItem(IDC_MESSAGE)->EnableWindow(state);
-	}
+	m_ButtonDialTone.EnableWindow(callsCount <= 0);
 	CButton *buttonRedial = (CButton *)GetDlgItem(IDC_REDIAL);
 	CButton *buttonDelete = (CButton *)GetDlgItem(IDC_DELETE);
 	if (!state) {
@@ -1600,6 +1603,7 @@ void Dialer::UpdateCallButton(BOOL forse, int callsCount)
 
 void Dialer::Action(DialerActions action)
 {
+	mainDlg->StopDialTone();
 	CString number;
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	combobox->GetWindowText(number);
@@ -1625,6 +1629,7 @@ void Dialer::Action(DialerActions action)
 
 void Dialer::Clear(bool update)
 {
+	mainDlg->StopDialTone();
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	combobox->SetCurSel(-1);
 	if (update) {
@@ -1635,6 +1640,11 @@ void Dialer::Clear(bool update)
 void Dialer::OnBnClickedCall()
 {
 	Action(ACTION_CALL);
+}
+
+void Dialer::OnBnClickedDialTone()
+{
+	mainDlg->BeginDialToneReadiness();
 }
 
 void Dialer::OnBnClickedDTMF()
@@ -1655,11 +1665,6 @@ void Dialer::OnBnClickedVideoCall()
 	Action(ACTION_VIDEO_CALL);
 }
 #endif
-
-void Dialer::OnBnClickedMessage()
-{
-	Action(ACTION_MESSAGE);
-}
 
 void Dialer::OnBnClickedHold()
 {
@@ -1684,11 +1689,16 @@ void Dialer::OnBnClickedEnd()
 
 void Dialer::OnCbnEditchangeComboAddr()
 {
+	CComboBox* combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
+	if (combobox->GetWindowTextLength()) {
+		mainDlg->StopDialTone();
+	}
 	UpdateCallButton();
 }
 
 void Dialer::OnCbnSelchangeComboAddr()
 {
+	mainDlg->StopDialTone();
 	UpdateCallButton(TRUE);
 }
 
@@ -1755,7 +1765,7 @@ void Dialer::OnBnClickedKeyGrate()
 void Dialer::OnBnClickedRedial()
 {
 	if (!accountSettings.lastCallNumber.IsEmpty()) {
-		mainDlg->MakeCall(accountSettings.lastCallNumber, accountSettings.lastCallHasVideo, false, true);
+		SetNumber(accountSettings.lastCallNumber);
 	}
 }
 
