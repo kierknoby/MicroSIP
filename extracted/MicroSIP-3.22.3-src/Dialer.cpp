@@ -201,6 +201,7 @@ Dialer::Dialer(CWnd* pParent /*=NULL*/)
 	m_accountSidecar = NULL;
 	delayedDTMF = false;
 	m_hasVoicemail = false;
+	m_dialToneSessionActive = false;
 	m_isButtonVoicemailVisible = false;
 	Create(IDD, pParent);
 }
@@ -1441,7 +1442,7 @@ void Dialer::SetDTMF(CString digits)
 void Dialer::Input(CString digits, BOOL disableDTMF)
 {
 	if (!digits.IsEmpty()) {
-		mainDlg->StopDialTone();
+		mainDlg->DialToneTargetEntered();
 	}
 	if (!disableDTMF) {
 		DTMF(digits);
@@ -1517,7 +1518,7 @@ void Dialer::DialedAdd(CString number)
 void Dialer::SetNumber(CString  number, int callsCount)
 {
 	if (!number.IsEmpty()) {
-		mainDlg->StopDialTone();
+		mainDlg->DialToneTargetEntered(true);
 	}
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	CString old;
@@ -1585,7 +1586,7 @@ void Dialer::UpdateCallButton(BOOL forse, int callsCount)
 	GetDlgItem(IDC_VIDEO_CALL)->ShowWindow(SW_HIDE);
 	GetDlgItem(IDC_VIDEO_CALL)->EnableWindow(FALSE);
 #endif
-	m_ButtonDialTone.EnableWindow(callsCount <= 0);
+	m_ButtonDialTone.EnableWindow(m_dialToneSessionActive || (!len && callsCount <= 0));
 	CButton *buttonRedial = (CButton *)GetDlgItem(IDC_REDIAL);
 	CButton *buttonDelete = (CButton *)GetDlgItem(IDC_DELETE);
 	if (!state) {
@@ -1601,14 +1602,21 @@ void Dialer::UpdateCallButton(BOOL forse, int callsCount)
 	}
 }
 
+void Dialer::SetDialToneSessionActive(bool active)
+{
+	m_dialToneSessionActive = active;
+	m_ButtonDialTone.SetWindowText(Translate(active ? _T("Hang-Up") : _T("Dial-Tone")));
+	UpdateCallButton();
+}
+
 void Dialer::Action(DialerActions action)
 {
-	mainDlg->StopDialTone();
 	CString number;
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	combobox->GetWindowText(number);
 	number.Trim();
 	if (!number.IsEmpty()) {
+		mainDlg->DialToneCallStarting();
 		bool res = false;
 		if (action != ACTION_MESSAGE) {
 			res = mainDlg->MakeCall(number, action == ACTION_VIDEO_CALL);
@@ -1620,16 +1628,19 @@ void Dialer::Action(DialerActions action)
 			//-- save dialed in combobox
 			DialedAdd(number);
 			if (!accountSettings.singleMode) {
-				Clear();
+				Clear(true, true);
 			}
 			//-- end
+		}
+		else {
+			mainDlg->DialToneCallCancelled();
 		}
 	}
 }
 
-void Dialer::Clear(bool update)
+void Dialer::Clear(bool update, bool preserveQualification)
 {
-	mainDlg->StopDialTone();
+	mainDlg->StopDialTone(_T("Dial target cleared · READY left"), preserveQualification);
 	CComboBox *combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	combobox->SetCurSel(-1);
 	if (update) {
@@ -1644,7 +1655,12 @@ void Dialer::OnBnClickedCall()
 
 void Dialer::OnBnClickedDialTone()
 {
-	mainDlg->BeginDialToneReadiness();
+	if (m_dialToneSessionActive) {
+		mainDlg->StopDialTone(_T("Hang-Up pressed · Dial-Tone session ended"));
+	}
+	else {
+		mainDlg->BeginDialToneReadiness();
+	}
 }
 
 void Dialer::OnBnClickedDTMF()
@@ -1691,14 +1707,14 @@ void Dialer::OnCbnEditchangeComboAddr()
 {
 	CComboBox* combobox = (CComboBox*)GetDlgItem(IDC_NUMBER);
 	if (combobox->GetWindowTextLength()) {
-		mainDlg->StopDialTone();
+		mainDlg->DialToneTargetEntered();
 	}
 	UpdateCallButton();
 }
 
 void Dialer::OnCbnSelchangeComboAddr()
 {
-	mainDlg->StopDialTone();
+	mainDlg->DialToneTargetEntered(true);
 	UpdateCallButton(TRUE);
 }
 

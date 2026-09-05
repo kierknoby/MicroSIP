@@ -103,6 +103,7 @@ public:
 
 	bool m_isButtonVoicemailVisible;
 	bool m_hasVoicemail;
+	bool m_dialToneSessionActive;
 	CBitmapButton m_ButtonVoicemail;
 	CBitmapButton m_ButtonVoicemailDisabled;
 	HICON m_hIconHold;
@@ -131,13 +132,14 @@ public:
 	void DialedAdd(CString number);
 	void SetNumber(CString  number, int callsCount = -1);
 	void UpdateCallButton(BOOL forse = FALSE, int callsCount = -1);
+	void SetDialToneSessionActive(bool active);
 	void UpdateAccountIdentity();
 	void SetDarkMode(bool enabled);
 	void OpenAccountSidecar();
 	void CloseAccountSidecar();
 	void RepositionAccountSidecar();
 	void Action(DialerActions action);
-	void Clear(bool update=true);
+	void Clear(bool update=true, bool preserveQualification=false);
 	void TimerVuMeter();
 	// Bottom of the utility button row in parent client coordinates; 0 when the row does not exist.
 	int GetUtilityRowBottom();

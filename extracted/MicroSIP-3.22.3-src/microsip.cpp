@@ -243,7 +243,7 @@ LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS *ExceptionInfo)
                     CHttpFile* pFile = m_pHttp->OpenRequest(CHttpConnection::HTTP_VERB_POST, _T("/crash-report"));
                     CString strHeaders = _T("Content-Type: application/octet-stream");
                     strHeaders.AppendFormat(_T("\r\nX-Name: %s\r\nX-Version: %d.%d.%d.%d"),
-                        CString(urlencode(_GLOBAL_NAME_VISIBLE)),
+                        CString(urlencode(_GLOBAL_NAME)),
                         _GLOBAL_VERSION_COMMA
                     );
 #ifdef _GLOBAL_VIDEO
@@ -294,7 +294,7 @@ LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS *ExceptionInfo)
 #ifdef _GLOBAL_VIDEO
             message.Format(_T("A crash happened. Check your video card driver or try to install the LITE version (without video). Tracking info: %s%s"), tm.Format(_T("%Y%m%d%H%M%S")), sent ? _T("Y") : _T("N"));
 #else
-            message.Format(_T("A crash happened. Make sure your system is working properly and that you have enough free memory and hard disk space. Check your sound device driver, antivirus software. Try disabling additional softphone features. You can try uninstalling MicroSIP \"with configuration\" and reinstalling it. Tracking info: %s%s"), tm.Format(_T("%Y%m%d%H%M%S")), sent ? _T("Y") : _T("N"));
+            message.Format(_T("A crash happened. Make sure your system is working properly and that you have enough free memory and hard disk space. Check your sound device driver and antivirus software. Try disabling additional softphone features. You can try uninstalling Dial-Tone \"with configuration\" and reinstalling it. Tracking info: %s%s"), tm.Format(_T("%Y%m%d%H%M%S")), sent ? _T("Y") : _T("N"));
 #endif
             AfxMessageBox(message, MB_ICONERROR);
         }

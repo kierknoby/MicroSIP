@@ -177,7 +177,11 @@ public:
 	void AppBarApplyPosition();
 	void LayoutCallTracePanel();
 	void BeginDialToneReadiness();
-	void StopDialTone();
+	void SetDialToneSessionActive(bool active);
+	void StopDialTone(CString reason = _T(""), bool retainQualification = false);
+	void DialToneTargetEntered(bool selected = false);
+	void DialToneCallStarting();
+	void DialToneCallCancelled();
 	void CallTraceOnCallState(pjsua_call_info* call_info);
 	void CallTraceOnMediaState(pjsua_call_info* call_info);
 	void CallTraceOnIdentityChange(pjsua_call_id call_id);
@@ -224,6 +228,15 @@ protected:
 	int m_dialToneBaseState;
 	CString m_dialToneServer;
 	CString m_dialToneTransport;
+	bool m_dialToneCheckPending;
+	DWORD m_dialToneAudioMs;
+	DWORD m_dialToneReadyTick;
+	pjsua_acc_id m_dialToneReadyAccount;
+	bool m_dialToneCallPending;
+	DWORD m_dialToneOptionsSamples[5];
+	DWORD m_dialToneAudioSamples[5];
+	unsigned m_dialToneSampleCount;
+	unsigned m_dialToneSampleNext;
 		
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnDestroy();
