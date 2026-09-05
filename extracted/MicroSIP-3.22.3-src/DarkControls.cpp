@@ -232,3 +232,62 @@ void CDarkTabCtrl::OnPaint()
 	}
 	dc.SetBkMode(oldBkMode);
 }
+
+IMPLEMENT_DYNAMIC(CPlaceholderEdit, CEdit)
+
+BEGIN_MESSAGE_MAP(CPlaceholderEdit, CEdit)
+	ON_WM_PAINT()
+	ON_CONTROL_REFLECT(EN_CHANGE, OnChange)
+END_MESSAGE_MAP()
+
+CPlaceholderEdit::CPlaceholderEdit()
+{
+	m_darkMode = false;
+	m_wasEmpty = true;
+}
+
+void CPlaceholderEdit::SetPlaceholder(LPCTSTR text)
+{
+	m_placeholder = text;
+	if (::IsWindow(m_hWnd)) {
+		Invalidate();
+	}
+}
+
+void CPlaceholderEdit::SetDarkMode(bool enabled)
+{
+	m_darkMode = enabled;
+	if (::IsWindow(m_hWnd)) {
+		Invalidate();
+	}
+}
+
+void CPlaceholderEdit::OnChange()
+{
+	bool empty = GetWindowTextLength() == 0;
+	if (empty != m_wasEmpty) {
+		m_wasEmpty = empty;
+		Invalidate();
+	}
+}
+
+void CPlaceholderEdit::OnPaint()
+{
+	Default();
+	if (m_placeholder.IsEmpty() || GetWindowTextLength() > 0) {
+		return;
+	}
+	CClientDC dc(this);
+	CRect rect;
+	GetRect(&rect);
+	CFont* font = GetFont();
+	CFont* oldFont = font ? dc.SelectObject(font) : NULL;
+	int oldBkMode = dc.SetBkMode(TRANSPARENT);
+	COLORREF oldColor = dc.SetTextColor(m_darkMode ? DarkPalette::SecondaryText() : GetSysColor(COLOR_GRAYTEXT));
+	dc.DrawText(m_placeholder, rect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+	dc.SetTextColor(oldColor);
+	dc.SetBkMode(oldBkMode);
+	if (oldFont) {
+		dc.SelectObject(oldFont);
+	}
+}

@@ -167,7 +167,12 @@ void CButtonDialer::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	COLORREF crOldColor;
 	if (!forceNumeric && m_map.Lookup(strTemp, letters)) {
 		rtl.left += x14;
+		crOldColor = dc.GetTextColor();
+		if (accountSettings.darkMode) {
+			dc.SetTextColor(DarkPalette::Text());
+		}
 		dc.DrawText(strTemp, rtl, DT_LEFT | DT_VCENTER | DT_SINGLELINE);		// Draw out the caption
+		dc.SetTextColor(crOldColor);
 		HFONT hOldFont = (HFONT)SelectObject(dc.m_hDC, m_FontLetters);
 		// Do your text drawing
 		rtl.left += x12;

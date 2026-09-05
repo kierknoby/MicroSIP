@@ -40,3 +40,23 @@ protected:
 	afx_msg BOOL OnEraseBkgnd(CDC* dc);
 	DECLARE_MESSAGE_MAP()
 };
+
+// Multiline edit with a painted-only hint; the hint never becomes control text.
+class CPlaceholderEdit : public CEdit
+{
+	DECLARE_DYNAMIC(CPlaceholderEdit)
+
+public:
+	CPlaceholderEdit();
+	void SetPlaceholder(LPCTSTR text);
+	void SetDarkMode(bool enabled);
+
+protected:
+	CString m_placeholder;
+	bool m_darkMode;
+	bool m_wasEmpty;
+
+	afx_msg void OnPaint();
+	afx_msg void OnChange();
+	DECLARE_MESSAGE_MAP()
+};

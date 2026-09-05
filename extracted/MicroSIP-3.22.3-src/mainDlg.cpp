@@ -210,8 +210,9 @@ public:
 
 	bool CreatePanel(CWnd* parent)
 	{
+		// WS_CLIPCHILDREN keeps the panel background erase from wiping the child controls.
 		if (!CreateEx(0, AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW), NULL,
-			WS_CHILD, CRect(0, 0, 0, 0), parent, 0)) {
+			WS_CHILD | WS_CLIPCHILDREN, CRect(0, 0, 0, 0), parent, 0)) {
 			return false;
 		}
 		LOGFONT lf;
@@ -245,9 +246,11 @@ public:
 		notes.Create(WS_CHILD | WS_VSCROLL | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_LEFT,
 			CRect(0, 0, 0, 0), this, IDC_CALL_NOTES_EDIT);
 		notes.SetFont(&logFont);
+		notes.SetPlaceholder(Translate(_T("Start typing...")));
 		traceMode.SetCheck(BST_CHECKED);
 		mode = 0;
 		viewingCurrent = true;
+		SetDarkMode(accountSettings.darkMode);
 		Reset();
 		RefreshRecent();
 		return true;
@@ -479,11 +482,19 @@ public:
 		save.SetDarkMode(enabled);
 		clear.SetDarkMode(enabled);
 		recent.SetDarkMode(enabled);
+		notes.SetDarkMode(enabled);
 		SetWindowTheme(log.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
 		SetWindowTheme(notes.m_hWnd, enabled ? L"DarkMode_Explorer" : NULL, NULL);
-		clear.Invalidate();
-		log.Invalidate();
-		Invalidate();
+		// Rich Edit ignores WM_CTLCOLOR, so background and default text colour go through its own API.
+		log.SetBackgroundColor(enabled ? FALSE : TRUE, enabled ? DarkPalette::Input() : 0);
+		CHARFORMAT2 base;
+		memset(&base, 0, sizeof(base));
+		base.cbSize = sizeof(CHARFORMAT2);
+		base.dwMask = CFM_COLOR;
+		base.crTextColor = EventColor();
+		log.SetDefaultCharFormat(base);
+		FormatTraceTimestamps();
+		RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 	}
 
 	void LayoutChildren()
@@ -646,6 +657,9 @@ private:
 		if (m_scrollTarget.y != GetScrollPosition().y) SetTimer(IDT_CALL_TRACE_SCROLL, CALL_TRACE_SCROLL_FRAME_MS, NULL);
 	}
 
+	COLORREF EventColor() const { return darkMode ? DarkPalette::Text() : GetSysColor(COLOR_WINDOWTEXT); }
+	COLORREF TimestampColor() const { return darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120); }
+
 	void AppendVisibleLine(const CString& line, int eventLength)
 	{
 		if (lineCount == 1) log.SetWindowText(_T(""));
@@ -656,27 +670,43 @@ private:
 		memset(&timestamp, 0, sizeof(timestamp));
 		timestamp.cbSize = sizeof(CHARFORMAT2);
 		timestamp.dwMask = CFM_COLOR;
-		timestamp.crTextColor = darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120);
+		timestamp.crTextColor = TimestampColor();
 		log.SetSelectionCharFormat(timestamp);
 		log.ReplaceSel(line.Left(timestampLength));
 		CHARFORMAT2 event;
 		memset(&event, 0, sizeof(event));
 		event.cbSize = sizeof(CHARFORMAT2);
 		event.dwMask = CFM_COLOR;
-		event.crTextColor = darkMode ? DarkPalette::Text() : GetSysColor(COLOR_WINDOWTEXT);
+		event.crTextColor = EventColor();
 		log.SetSelectionCharFormat(event);
 		log.ReplaceSel(line.Mid(timestampLength));
 	}
 
+	// Recolours the whole buffer, so it also covers historical snapshots and theme switches.
 	void FormatTraceTimestamps()
 	{
+		if (!::IsWindow(log.m_hWnd)) {
+			return;
+		}
 		CString text;
 		log.GetWindowText(text);
+		POINT scroll = GetScrollPosition();
+		long selectionStart = 0;
+		long selectionEnd = 0;
+		log.GetSel(selectionStart, selectionEnd);
+		log.SetRedraw(FALSE);
+		CHARFORMAT2 event;
+		memset(&event, 0, sizeof(event));
+		event.cbSize = sizeof(CHARFORMAT2);
+		event.dwMask = CFM_COLOR;
+		event.crTextColor = EventColor();
+		log.SetSel(0, -1);
+		log.SetSelectionCharFormat(event);
 		CHARFORMAT2 timestamp;
 		memset(&timestamp, 0, sizeof(timestamp));
 		timestamp.cbSize = sizeof(CHARFORMAT2);
 		timestamp.dwMask = CFM_COLOR;
-		timestamp.crTextColor = darkMode ? DarkPalette::SecondaryText() : RGB(120, 120, 120);
+		timestamp.crTextColor = TimestampColor();
 		int start = 0;
 		while (start < text.GetLength()) {
 			int end = text.Find(_T('\n'), start);
@@ -688,6 +718,10 @@ private:
 			if (end == -1) break;
 			start = end + 1;
 		}
+		log.SetSel(selectionStart, selectionEnd);
+		SetScrollPosition(scroll);
+		log.SetRedraw(TRUE);
+		log.Invalidate();
 	}
 
 	struct CallMetadata {
@@ -828,7 +862,7 @@ private:
 	CButtonBottom save;
 	CButtonBottom clear;
 	CRichEditCtrl log;
-	CEdit notes;
+	CPlaceholderEdit notes;
 	CFont logFont;
 	int lineCount;
 	bool darkMode = false;
