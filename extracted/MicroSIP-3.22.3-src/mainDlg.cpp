@@ -2349,7 +2349,8 @@ static void on_incoming_call(pjsua_acc_id acc, pjsua_call_id call_id,
 		else {
 			CString forwardingDestination = accountSettings.forwardingNumber;
 			forwardingDestination.Trim();
-			if (accountSettings.FWD && !forwardingDestination.IsEmpty()) {
+			bool forwardAll = accountSettings.forwarding == _T("all");
+			if (forwardAll && !forwardingDestination.IsEmpty()) {
 				CString contactTarget;
 				CString failure;
 				if (redirect_incoming_call(call_info, forwardingDestination, contactTarget, failure)) {
@@ -3332,9 +3333,14 @@ int CmainDlg::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		dpiY = 96;
 	}
 
+	// The main window never supports maximising. Enforce the resource style at
+	// creation time as well so the non-client frame contains no maximise button.
+	lpCreateStruct->style &= ~WS_MAXIMIZEBOX;
+	::SetWindowLong(m_hWnd, GWL_STYLE, lpCreateStruct->style);
+
 	bool setpos = false;
 	if (accountSettings.noResize) {
-		lpCreateStruct->style &= ~(WS_MAXIMIZEBOX | WS_THICKFRAME);
+		lpCreateStruct->style &= ~WS_THICKFRAME;
 		::SetWindowLong(m_hWnd, GWL_STYLE, lpCreateStruct->style);
 		CRect rectStub;
 		GetClientRect(&rectStub);
@@ -5498,7 +5504,8 @@ void CmainDlg::UpdateWindowText(CString text, int icon, bool afterRegister)
 							}
 							str = Translate(_T("Online"));
 						}
-						if (accountSettings.FWD && !accountSettings.forwardingNumber.IsEmpty()) {
+						bool forwardAll = accountSettings.forwarding == _T("all");
+						if (forwardAll && !accountSettings.forwardingNumber.IsEmpty()) {
 							icon = IDI_FORWARDING;
 							str = Translate(_T("Call Forwarding"));
 						}

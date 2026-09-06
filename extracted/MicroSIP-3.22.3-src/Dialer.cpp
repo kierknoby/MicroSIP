@@ -1994,8 +1994,11 @@ void Dialer::OnBnClickedFWD()
 	CString destination;
 	m_CfwDestination.GetWindowText(destination);
 	destination.Trim();
-	accountSettings.FWD = !destination.IsEmpty() && m_ButtonFWD.GetCheck() == BST_CHECKED;
-	m_ButtonFWD.SetCheck(accountSettings.FWD ? BST_CHECKED : BST_UNCHECKED);
+	bool enabled = !destination.IsEmpty() && m_ButtonFWD.GetCheck() == BST_CHECKED;
+	// Settings > Call Forwarding is authoritative.  The front-panel control
+	// selects or clears its All Calls mode instead of keeping a second state.
+	accountSettings.forwarding = enabled ? _T("all") : _T("");
+	m_ButtonFWD.SetCheck(enabled ? BST_CHECKED : BST_UNCHECKED);
 	mainDlg->UpdateWindowText();
 	mainDlg->AccountSettingsPendingSave();
 }
@@ -2062,9 +2065,10 @@ void Dialer::UpdateCfwState(bool persist)
 	m_CfwDestination.GetWindowText(destination);
 	CString usable = destination;
 	usable.Trim();
-	if (usable.IsEmpty() && !m_cfwEditing) accountSettings.FWD = false;
+	bool enabled = accountSettings.forwarding == _T("all");
+	if (usable.IsEmpty() && !m_cfwEditing) enabled = false;
 	m_ButtonFWD.EnableWindow(!usable.IsEmpty());
-	m_ButtonFWD.SetCheck(accountSettings.FWD ? BST_CHECKED : BST_UNCHECKED);
+	m_ButtonFWD.SetCheck(enabled ? BST_CHECKED : BST_UNCHECKED);
 	if (persist) {
 		accountSettings.forwardingNumber = destination;
 		mainDlg->UpdateWindowText();
