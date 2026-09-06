@@ -101,7 +101,7 @@ static bool LoadBitmapBytes(const BYTE* bytes, DWORD size, Gdiplus::Bitmap*& bit
 static bool LoadBitmapResource(Gdiplus::Bitmap*& bitmap, IStream*& stream)
 {
 	HINSTANCE instance = AfxGetResourceHandle();
-	HRSRC resource = FindResource(instance, MAKEINTRESOURCE(IDR_FREEPBXUK_LOGO), RT_RCDATA);
+	HRSRC resource = FindResource(instance, MAKEINTRESOURCE(IDR_DIALTONE_LOGO), RT_RCDATA);
 	if (!resource) return false;
 	HGLOBAL loaded = LoadResource(instance, resource);
 	return loaded && LoadBitmapBytes((const BYTE*)LockResource(loaded), SizeofResource(instance, resource), bitmap, stream);
@@ -143,7 +143,7 @@ protected:
 	BOOL OnInitDialog()
 	{
 		CDialog::OnInitDialog();
-		url = custom ? accountSettings.brandingUrl : _T("https://freepbx.uk");
+		url = custom ? accountSettings.brandingUrl : _T("https://egyptianeyes.com");
 		SetDlgItemText(IDC_BRANDING_URL, url);
 		GetDlgItem(IDC_BRANDING_URL)->EnableWindow(custom);
 		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(!custom);
@@ -214,7 +214,7 @@ protected:
 
 	afx_msg void OnRestoreDefault()
 	{
-		custom = false; stagedSource.Empty(); url = _T("https://freepbx.uk");
+		custom = false; stagedSource.Empty(); url = _T("https://egyptianeyes.com");
 		SetDlgItemText(IDC_BRANDING_URL, url); GetDlgItem(IDC_BRANDING_URL)->EnableWindow(FALSE);
 		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(TRUE);
 		LoadPreview(CString(), true);
@@ -294,7 +294,7 @@ public:
 	{
 		delete image; image = NULL;
 		if (stream) { stream->Release(); stream = NULL; }
-		logoUrl = accountSettings.brandingCustom ? accountSettings.brandingUrl : _T("https://freepbx.uk");
+		logoUrl = accountSettings.brandingCustom ? accountSettings.brandingUrl : _T("https://egyptianeyes.com");
 		bool loaded = accountSettings.brandingCustom
 			? LoadBitmapFile(BrandingLogoPath(), image, stream)
 			: LoadBitmapResource(image, stream);
@@ -318,7 +318,7 @@ protected:
 		const int attributionHeight = MulDiv(12, dpiY, 96);
 		Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(8, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
 		const int logoDisplayHeight = max(0,
-			client.Height() - verticalPadding * 2 - contentGap - attributionHeight);
+			client.Height() - verticalPadding * 2 - contentGap * 2 - attributionHeight * 2);
 		const int availableWidth = max(0, client.Width() - horizontalMargin * 2);
 		const UINT sourceWidth = image ? image->GetWidth() : 0;
 		const UINT sourceHeight = image ? image->GetHeight() : 0;
@@ -339,6 +339,26 @@ protected:
 		Gdiplus::SolidBrush textBrush(accountSettings.darkMode ? Gdiplus::Color(255, 190, 196, 202) : Gdiplus::Color(255, 100, 100, 100));
 		Gdiplus::SolidBrush linkBrush(Gdiplus::Color(255, 40, 90, 150));
 		Gdiplus::RectF measured;
+		const WCHAR* version = _T(_DIALTONE_VERSION);
+		const WCHAR* productSeparator = L" by ";
+		const WCHAR* publisher = L"Egyptian Eyes";
+		graphics.MeasureString(version, -1, &font, Gdiplus::PointF(0, 0), &measured);
+		Gdiplus::REAL versionWidth = measured.Width;
+		graphics.MeasureString(productSeparator, -1, &font, Gdiplus::PointF(0, 0), &measured);
+		Gdiplus::REAL productSeparatorWidth = measured.Width;
+		graphics.MeasureString(publisher, -1, &font, Gdiplus::PointF(0, 0), &measured);
+		Gdiplus::REAL publisherWidth = measured.Width;
+		Gdiplus::REAL productWidth = versionWidth + productSeparatorWidth + publisherWidth;
+		Gdiplus::REAL productX = (Gdiplus::REAL)((client.Width() - productWidth) / 2);
+		Gdiplus::REAL productY = (Gdiplus::REAL)(verticalPadding + logoDisplayHeight + contentGap);
+		graphics.DrawString(version, -1, &font, Gdiplus::PointF(productX, productY), &textBrush);
+		productX += versionWidth;
+		graphics.DrawString(productSeparator, -1, &font, Gdiplus::PointF(productX, productY), &textBrush);
+		productX += productSeparatorWidth;
+		egyptianEyesLinkRect = CRect((int)productX, (int)productY,
+			(int)(productX + publisherWidth), (int)(productY + attributionHeight));
+		graphics.DrawString(publisher, -1, &font, Gdiplus::PointF(productX, productY), &linkBrush);
+
 		const WCHAR* prefix = L"Powered by ";
 		const WCHAR* link = L"MicroSIP";
 		const WCHAR* suffix = L" \x2013 SIP Softphone for Windows";
@@ -351,7 +371,7 @@ protected:
 		suffixWidth = measured.Width;
 		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth;
 		Gdiplus::REAL textX = (Gdiplus::REAL)((client.Width() - textWidth) / 2);
-		Gdiplus::REAL textY = (Gdiplus::REAL)(verticalPadding + logoDisplayHeight + contentGap);
+		Gdiplus::REAL textY = productY + attributionHeight + contentGap;
 		graphics.DrawString(prefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
 		textX += prefixWidth;
 		microsipLinkRect = CRect((int)textX, (int)textY, (int)(textX + linkWidth), (int)(textY + MulDiv(12, dpiY, 96)));
@@ -367,6 +387,9 @@ protected:
 		else if (microsipLinkRect.PtInRect(point)) {
 			ShellExecute(NULL, _T("open"), _T("https://www.microsip.org/"), NULL, NULL, SW_SHOWNORMAL);
 		}
+		else if (egyptianEyesLinkRect.PtInRect(point)) {
+			ShellExecute(NULL, _T("open"), _T("https://egyptianeyes.com"), NULL, NULL, SW_SHOWNORMAL);
+		}
 		CWnd::OnLButtonUp(nFlags, point);
 	}
 	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
@@ -374,7 +397,8 @@ protected:
 		CPoint point;
 		GetCursorPos(&point);
 		ScreenToClient(&point);
-		if ((logoClickable && freepbxLinkRect.PtInRect(point)) || microsipLinkRect.PtInRect(point)) {
+		if ((logoClickable && freepbxLinkRect.PtInRect(point)) || microsipLinkRect.PtInRect(point)
+			|| egyptianEyesLinkRect.PtInRect(point)) {
 			if (!handCursor) {
 				handCursor = LoadCursor(NULL, IDC_HAND);
 			}
@@ -390,6 +414,7 @@ private:
 	IStream* stream;
 	CRect freepbxLinkRect;
 	CRect microsipLinkRect;
+	CRect egyptianEyesLinkRect;
 	HCURSOR handCursor;
 	CString logoUrl;
 	bool logoClickable = false;
@@ -1192,7 +1217,7 @@ static bool updateCheckerShow;
 
 static bool upstream_updates_enabled()
 {
-	// Upstream MicroSIP updates are disabled in the FreePBX UK fork.
+	// Upstream MicroSIP updates are disabled in the Dial-Tone fork.
 	// Fork updates must not replace this build with an upstream MicroSIP release.
 	return false;
 }

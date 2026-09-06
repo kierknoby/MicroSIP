@@ -300,6 +300,8 @@ BOOL SettingsDlg::OnInitDialog()
 			break;
 		}
 	}
+	GetDlgItem(IDC_SETTINGS_FWD_NUMBER)->SendMessage(EM_SETCUEBANNER, FALSE,
+		(LPARAM)_T("Forward Destination"));
 	GetDlgItem(IDC_SETTINGS_FWD_NUMBER)->SetWindowText(accountSettings.forwardingNumber);
 	str.Format(_T("%d"), accountSettings.forwardingDelay);
 	GetDlgItem(IDC_SETTINGS_FWD_DELAY)->SetWindowText(str);

@@ -905,7 +905,7 @@ void Dialer::RebuildButtons(bool init)
 		m_CfwDestination.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL,
 			destinationRect, this, IDC_DIALER_CFW_DESTINATION);
 		m_CfwDestination.SetFont(GetFont());
-		m_CfwDestination.SetPlaceholder(Translate(_T("Forwarding destination")));
+		m_CfwDestination.SetPlaceholder(_T("Forward Destination"));
 		m_CfwDestination.SetWindowText(accountSettings.forwardingNumber);
 		AutoMove(m_CfwDestination.m_hWnd, 100, 100, 0, 0);
 		rect.left = destinationRect.left - stepPx;

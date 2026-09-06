@@ -387,7 +387,7 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <None Include="res\freepbxUK_Logo.png">
+    <None Include="res\Dial-Tone_Logo.png">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="res\dialog.rc2">
