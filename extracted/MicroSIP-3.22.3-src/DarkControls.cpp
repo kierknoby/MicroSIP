@@ -245,6 +245,7 @@ CPlaceholderEdit::CPlaceholderEdit()
 {
 	m_darkMode = false;
 	m_wasEmpty = true;
+	m_placeholderFontPointReduction = 0;
 }
 
 void CPlaceholderEdit::SetPlaceholder(LPCTSTR text)
@@ -253,6 +254,25 @@ void CPlaceholderEdit::SetPlaceholder(LPCTSTR text)
 	if (::IsWindow(m_hWnd)) {
 		Invalidate();
 	}
+}
+
+void CPlaceholderEdit::SetPlaceholderFontPointReduction(int points)
+{
+	m_placeholderFontPointReduction = max(0, points);
+	if (m_placeholderFont.GetSafeHandle()) m_placeholderFont.DeleteObject();
+	CFont* font = GetFont();
+	if (font && m_placeholderFontPointReduction) {
+		LOGFONT lf;
+		if (font->GetLogFont(&lf)) {
+			HDC screen = ::GetDC(NULL);
+			int dpi = screen ? GetDeviceCaps(screen, LOGPIXELSY) : 96;
+			if (screen) ::ReleaseDC(NULL, screen);
+			int reduction = MulDiv(m_placeholderFontPointReduction, dpi, 72);
+			lf.lfHeight += lf.lfHeight < 0 ? reduction : -reduction;
+			m_placeholderFont.CreateFontIndirect(&lf);
+		}
+	}
+	if (::IsWindow(m_hWnd)) Invalidate();
 }
 
 void CPlaceholderEdit::SetDarkMode(bool enabled)
@@ -283,7 +303,7 @@ void CPlaceholderEdit::OnPaint()
 	CClientDC dc(this);
 	CRect rect;
 	GetRect(&rect);
-	CFont* font = GetFont();
+	CFont* font = m_placeholderFont.GetSafeHandle() ? &m_placeholderFont : GetFont();
 	CFont* oldFont = font ? dc.SelectObject(font) : NULL;
 	int oldBkMode = dc.SetBkMode(TRANSPARENT);
 	COLORREF oldColor = dc.SetTextColor(m_darkMode ? DarkPalette::SecondaryText() : GetSysColor(COLOR_GRAYTEXT));

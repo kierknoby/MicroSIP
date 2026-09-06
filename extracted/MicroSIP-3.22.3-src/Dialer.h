@@ -163,6 +163,8 @@ public:
 	afx_msg void OnBnClickedCancel();
 	afx_msg void OnBnClickedDND(); 
 	afx_msg void OnBnClickedFWD();
+	afx_msg void OnCfwDestinationSetFocus();
+	afx_msg void OnCfwDestinationKillFocus();
 	afx_msg void OnCfwDestinationChange();
 	afx_msg void OnBnClickedAA();
 	afx_msg void OnBnClickedAC();
@@ -225,5 +227,12 @@ public:
 	afx_msg void OnBnClickedShortcut(UINT nID);
 	void RebuildButtons(bool init = false);
 	void UpdateCfwState(bool persist);
+	void CommitCfwDestination();
+	void AbandonCfwDestination(bool moveFocus);
+	void UpdateCfwEmptyTimer();
 	bool m_rebuildingButtons;
+	bool m_cfwEditing;
+	bool m_cfwUpdating;
+	CString m_cfwCommittedDestination;
+	enum { IDT_TIMER_CFW_EMPTY = 0x7E01 };
 };

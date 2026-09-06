@@ -204,6 +204,8 @@ Dialer::Dialer(CWnd* pParent /*=NULL*/)
 	m_dialToneSessionActive = false;
 	m_isButtonVoicemailVisible = false;
 	m_rebuildingButtons = false;
+	m_cfwEditing = false;
+	m_cfwUpdating = false;
 	Create(IDD, pParent);
 }
 
@@ -716,6 +718,7 @@ void Dialer::OnDestroy()
 {
 	mainDlg->StopDialTone();
 	KillTimer(IDT_TIMER_VU_METER);
+	KillTimer(IDT_TIMER_CFW_EMPTY);
 	CBaseDialog::OnDestroy();
 }
 
@@ -732,6 +735,8 @@ BEGIN_MESSAGE_MAP(Dialer, CBaseDialog)
 	ON_WM_CTLCOLOR()
 	ON_BN_CLICKED(IDC_DIALER_DND, &Dialer::OnBnClickedDND)
 	ON_BN_CLICKED(IDC_DIALER_FWD, &Dialer::OnBnClickedFWD)
+	ON_EN_SETFOCUS(IDC_DIALER_CFW_DESTINATION, &Dialer::OnCfwDestinationSetFocus)
+	ON_EN_KILLFOCUS(IDC_DIALER_CFW_DESTINATION, &Dialer::OnCfwDestinationKillFocus)
 	ON_EN_CHANGE(IDC_DIALER_CFW_DESTINATION, &Dialer::OnCfwDestinationChange)
 	ON_BN_CLICKED(IDC_DIALER_AA, &Dialer::OnBnClickedAA)
 	ON_BN_CLICKED(IDC_DIALER_AC, &Dialer::OnBnClickedAC)
@@ -906,6 +911,9 @@ void Dialer::RebuildButtons(bool init)
 			destinationRect, this, IDC_DIALER_CFW_DESTINATION);
 		m_CfwDestination.SetFont(GetFont());
 		m_CfwDestination.SetPlaceholder(_T("Forward Destination"));
+		m_CfwDestination.SetPlaceholderFontPointReduction(1);
+		m_cfwCommittedDestination = accountSettings.forwardingNumber;
+		m_cfwEditing = false;
 		m_CfwDestination.SetWindowText(accountSettings.forwardingNumber);
 		AutoMove(m_CfwDestination.m_hWnd, 100, 100, 0, 0);
 		rect.left = destinationRect.left - stepPx;
@@ -1057,12 +1065,36 @@ void Dialer::OnTimer(UINT_PTR TimerVal)
 	if (TimerVal == IDT_TIMER_SHORTCUTS_BLINK) {
 		OnTimerShortcutsBlink();
 	}
+	if (TimerVal == IDT_TIMER_CFW_EMPTY) {
+		KillTimer(IDT_TIMER_CFW_EMPTY);
+		if (GetFocus() == &m_CfwDestination && m_CfwDestination.GetWindowTextLength() == 0) {
+			AbandonCfwDestination(true);
+		}
+	}
 }
 
 BOOL Dialer::PreTranslateMessage(MSG* pMsg)
 {
 	if (m_ToolTip) {
 		m_ToolTip.RelayEvent(pMsg);
+	}
+	if (::IsWindow(m_CfwDestination.m_hWnd) && GetFocus() == &m_CfwDestination) {
+		if (pMsg->message == WM_LBUTTONDOWN && pMsg->hwnd == m_ButtonFWD.m_hWnd) {
+			CommitCfwDestination();
+			return CBaseDialog::PreTranslateMessage(pMsg);
+		}
+		if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN) {
+			CommitCfwDestination();
+			return TRUE;
+		}
+		if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_ESCAPE) {
+			AbandonCfwDestination(true);
+			return TRUE;
+		}
+		if (pMsg->message == WM_KEYDOWN && m_CfwDestination.GetWindowTextLength() == 0) {
+			UpdateCfwEmptyTimer();
+		}
+		return CBaseDialog::PreTranslateMessage(pMsg);
 	}
 
 	BOOL catched = FALSE;
@@ -1970,7 +2002,57 @@ void Dialer::OnBnClickedFWD()
 
 void Dialer::OnCfwDestinationChange()
 {
-	if (!m_rebuildingButtons) UpdateCfwState(true);
+	if (m_rebuildingButtons || m_cfwUpdating) return;
+	UpdateCfwState(false);
+	if (m_cfwEditing) UpdateCfwEmptyTimer();
+}
+
+void Dialer::OnCfwDestinationSetFocus()
+{
+	m_cfwCommittedDestination = accountSettings.forwardingNumber;
+	m_cfwEditing = true;
+	UpdateCfwEmptyTimer();
+}
+
+void Dialer::OnCfwDestinationKillFocus()
+{
+	KillTimer(IDT_TIMER_CFW_EMPTY);
+	if (!m_cfwEditing) return;
+	AbandonCfwDestination(false);
+}
+
+void Dialer::CommitCfwDestination()
+{
+	if (!m_cfwEditing) return;
+	KillTimer(IDT_TIMER_CFW_EMPTY);
+	CString destination;
+	m_CfwDestination.GetWindowText(destination);
+	accountSettings.forwardingNumber = destination;
+	m_cfwCommittedDestination = destination;
+	m_cfwEditing = false;
+	UpdateCfwState(true);
+	if (::IsWindow(m_ButtonFWD.m_hWnd) && m_ButtonFWD.IsWindowEnabled()) m_ButtonFWD.SetFocus();
+	else GotoDlgCtrl(GetDlgItem(IDC_NUMBER));
+}
+
+void Dialer::AbandonCfwDestination(bool moveFocus)
+{
+	KillTimer(IDT_TIMER_CFW_EMPTY);
+	m_cfwEditing = false;
+	m_cfwUpdating = true;
+	m_CfwDestination.SetWindowText(m_cfwCommittedDestination);
+	m_cfwUpdating = false;
+	UpdateCfwState(false);
+	if (moveFocus) GotoDlgCtrl(GetDlgItem(IDC_NUMBER));
+}
+
+void Dialer::UpdateCfwEmptyTimer()
+{
+	KillTimer(IDT_TIMER_CFW_EMPTY);
+	if (m_cfwEditing && GetFocus() == &m_CfwDestination
+		&& m_CfwDestination.GetWindowTextLength() == 0) {
+		SetTimer(IDT_TIMER_CFW_EMPTY, 10000, NULL);
+	}
 }
 
 void Dialer::UpdateCfwState(bool persist)
@@ -1978,13 +2060,13 @@ void Dialer::UpdateCfwState(bool persist)
 	if (!::IsWindow(m_CfwDestination.m_hWnd) || !::IsWindow(m_ButtonFWD.m_hWnd)) return;
 	CString destination;
 	m_CfwDestination.GetWindowText(destination);
-	accountSettings.forwardingNumber = destination;
 	CString usable = destination;
 	usable.Trim();
-	if (usable.IsEmpty()) accountSettings.FWD = false;
+	if (usable.IsEmpty() && !m_cfwEditing) accountSettings.FWD = false;
 	m_ButtonFWD.EnableWindow(!usable.IsEmpty());
 	m_ButtonFWD.SetCheck(accountSettings.FWD ? BST_CHECKED : BST_UNCHECKED);
 	if (persist) {
+		accountSettings.forwardingNumber = destination;
 		mainDlg->UpdateWindowText();
 		mainDlg->AccountSettingsPendingSave();
 	}

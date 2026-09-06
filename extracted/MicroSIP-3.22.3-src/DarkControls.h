@@ -49,10 +49,13 @@ class CPlaceholderEdit : public CEdit
 public:
 	CPlaceholderEdit();
 	void SetPlaceholder(LPCTSTR text);
+	void SetPlaceholderFontPointReduction(int points);
 	void SetDarkMode(bool enabled);
 
 protected:
 	CString m_placeholder;
+	CFont m_placeholderFont;
+	int m_placeholderFontPointReduction;
 	bool m_darkMode;
 	bool m_wasEmpty;
 

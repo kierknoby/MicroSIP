@@ -5556,7 +5556,7 @@ void CmainDlg::UpdateWindowText(CString text, int icon, bool afterRegister)
 	if (isOffline) {
 		icon = IDI_DEFAULT;
 		if (MACRO_ENABLE_LOCAL_ACCOUNT) {
-			str.Format(_T("%s by Egyptian Eyes"), _T(_DIALTONE_VERSION));
+			str.Format(_T("Dial-Tone %s by Egyptian Eyes"), _T(_DIALTONE_VERSION));
 		}
 		else {
 			str = Translate(_T("Offline"));
