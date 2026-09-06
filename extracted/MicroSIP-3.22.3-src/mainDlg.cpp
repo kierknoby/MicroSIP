@@ -281,7 +281,7 @@ END_MESSAGE_MAP()
 class CmainDlg::CFreepbxFooter : public CWnd
 {
 public:
-	CFreepbxFooter() : image(NULL), stream(NULL), handCursor(NULL), tooltipAdded(false), publisherTooltipAdded(false) {}
+	CFreepbxFooter() : image(NULL), stream(NULL), handCursor(NULL), tooltipAdded(false) {}
 	~CFreepbxFooter()
 	{
 		delete image;
@@ -350,8 +350,6 @@ protected:
 		const WCHAR* prefix = L"Powered by ";
 		const WCHAR* link = L"MicroSIP";
 		const WCHAR* suffix = L" \x2013 SIP Softphone for Windows";
-		const WCHAR* publisherPrefix = L" \xB7 ";
-		const WCHAR* publisher = L"Egyptian Eyes";
 		graphics.MeasureString(prefix, -1, &font, Gdiplus::PointF(0, 0), &measured);
 		Gdiplus::REAL prefixWidth = measured.Width;
 		graphics.MeasureString(link, -1, &font, Gdiplus::PointF(0, 0), &measured);
@@ -359,11 +357,7 @@ protected:
 		Gdiplus::REAL suffixWidth;
 		graphics.MeasureString(suffix, -1, &font, Gdiplus::PointF(0, 0), &measured);
 		suffixWidth = measured.Width;
-		graphics.MeasureString(publisherPrefix, -1, &font, Gdiplus::PointF(0, 0), &measured);
-		Gdiplus::REAL publisherPrefixWidth = measured.Width;
-		graphics.MeasureString(publisher, -1, &font, Gdiplus::PointF(0, 0), &measured);
-		Gdiplus::REAL publisherWidth = measured.Width;
-		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth + publisherPrefixWidth + publisherWidth;
+		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth;
 		Gdiplus::REAL textX = (Gdiplus::REAL)((client.Width() - textWidth) / 2);
 		Gdiplus::REAL textY = (Gdiplus::REAL)(verticalPadding + logoDisplayHeight + contentGap);
 		graphics.DrawString(prefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
@@ -372,13 +366,6 @@ protected:
 		graphics.DrawString(link, -1, &font, Gdiplus::PointF(textX, textY), &linkBrush);
 		textX += linkWidth;
 		graphics.DrawString(suffix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
-		textX += suffixWidth;
-		graphics.DrawString(publisherPrefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
-		textX += publisherPrefixWidth;
-		publisherLinkRect = CRect((int)textX, (int)textY,
-			(int)(textX + publisherWidth), (int)(textY + attributionHeight));
-		graphics.DrawString(publisher, -1, &font, Gdiplus::PointF(textX, textY), &linkBrush);
-		UpdatePublisherTooltip(publisherLinkRect);
 	}
 	afx_msg void OnLButtonUp(UINT nFlags, CPoint point)
 	{
@@ -388,9 +375,6 @@ protected:
 		else if (microsipLinkRect.PtInRect(point)) {
 			ShellExecute(NULL, _T("open"), _T("https://www.microsip.org/"), NULL, NULL, SW_SHOWNORMAL);
 		}
-		else if (publisherLinkRect.PtInRect(point)) {
-			ShellExecute(NULL, _T("open"), _T("https://egyptianeyes.com"), NULL, NULL, SW_SHOWNORMAL);
-		}
 		CWnd::OnLButtonUp(nFlags, point);
 	}
 	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
@@ -399,7 +383,7 @@ protected:
 		GetCursorPos(&point);
 		ScreenToClient(&point);
 		if ((logoClickable && freepbxLinkRect.PtInRect(point))
-			|| microsipLinkRect.PtInRect(point) || publisherLinkRect.PtInRect(point)) {
+			|| microsipLinkRect.PtInRect(point)) {
 			if (!handCursor) {
 				handCursor = LoadCursor(NULL, IDC_HAND);
 			}
@@ -447,35 +431,15 @@ private:
 		}
 		tooltip.Activate(TRUE);
 	}
-	void UpdatePublisherTooltip(const CRect& rect)
-	{
-		if (rect.IsRectEmpty()) {
-			if (::IsWindow(tooltip.m_hWnd) && publisherTooltipAdded) tooltip.DelTool(this, 2);
-			publisherTooltipAdded = false;
-			return;
-		}
-		if (!::IsWindow(tooltip.m_hWnd)
-			&& !tooltip.Create(this, TTS_ALWAYSTIP | TTS_NOPREFIX)) return;
-		if (!publisherTooltipAdded) {
-			tooltip.AddTool(this, _T("egyptianeyes.com"), &rect, 2);
-			publisherTooltipAdded = true;
-		}
-		else {
-			tooltip.SetToolRect(this, 2, &rect);
-		}
-		tooltip.Activate(TRUE);
-	}
 	Gdiplus::Bitmap* image;
 	IStream* stream;
 	CRect freepbxLinkRect;
 	CRect microsipLinkRect;
-	CRect publisherLinkRect;
 	HCURSOR handCursor;
 	CString logoUrl;
 	bool logoClickable = false;
 	CToolTipCtrl tooltip;
 	bool tooltipAdded;
-	bool publisherTooltipAdded;
 };
 
 BEGIN_MESSAGE_MAP(CmainDlg::CFreepbxFooter, CWnd)
@@ -5617,7 +5581,7 @@ void CmainDlg::UpdateWindowText(CString text, int icon, bool afterRegister)
 	}
 #endif
 
-        m_bar.SetPaneText(0, str);
+		m_bar.SetPaneText(0, str);
 
 	if (icon != -1) {
 		HICON hIcon = (HICON)LoadImage(
@@ -5651,6 +5615,7 @@ void CmainDlg::UpdateWindowText(CString text, int icon, bool afterRegister)
 		}
 		//--
 	}
+	m_bar.RefreshPublisherLink();
 	if (showAccountDlg) {
 		PostMessage(UM_ON_ACCOUNT, 1);
 	}

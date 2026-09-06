@@ -32,6 +32,7 @@ StatusBar::StatusBar()
 
 StatusBar::~StatusBar()
 {
+	if (::IsWindow(publisherTooltip.m_hWnd)) publisherTooltip.DestroyWindow();
 }
 
 BEGIN_MESSAGE_MAP(StatusBar, CStatusBar)
@@ -49,6 +50,7 @@ void StatusBar::OnPaint()
 {
 	if (!accountSettings.darkMode) {
 		Default();
+		RefreshPublisherLink();
 		return;
 	}
 	CPaintDC dc(this);
@@ -83,6 +85,7 @@ void StatusBar::OnPaint()
 	dc.SelectObject(oldFont);
 	dc.SetTextColor(oldColor);
 	dc.SetBkMode(oldMode);
+	RefreshPublisherLink();
 }
 
 LRESULT StatusBar::OnIdleUpdateCmdUI(WPARAM wParam, LPARAM lParam)
@@ -107,14 +110,42 @@ void StatusBar::OnLButtonUp(UINT nFlags, CPoint point)
 
 void StatusBar::OnMouseMove(UINT nFlags, CPoint point)
 {
+	RefreshPublisherLink();
 	CStatusBar::OnMouseMove(nFlags, point);
+}
+
+BOOL StatusBar::PreTranslateMessage(MSG* message)
+{
+	if (::IsWindow(publisherTooltip.m_hWnd)) publisherTooltip.RelayEvent(message);
+	return CStatusBar::PreTranslateMessage(message);
+}
+
+void StatusBar::RefreshPublisherLink()
+{
+	CRect rect;
+	if (!GetPublisherLinkRect(rect)) {
+		if (::IsWindow(publisherTooltip.m_hWnd) && publisherTooltipAdded)
+			publisherTooltip.DelTool(this, 1);
+		publisherTooltipAdded = false;
+		return;
+	}
+	if (!::IsWindow(publisherTooltip.m_hWnd)
+		&& !publisherTooltip.Create(this, TTS_ALWAYSTIP | TTS_NOPREFIX)) return;
+	if (!publisherTooltipAdded) {
+		publisherTooltip.AddTool(this, _T("egyptianeyes.com"), &rect, 1);
+		publisherTooltipAdded = true;
+	}
+	else {
+		publisherTooltip.SetToolRect(this, 1, &rect);
+	}
+	publisherTooltip.Activate(TRUE);
 }
 
 bool StatusBar::GetPublisherLinkRect(CRect& rect)
 {
 	rect.SetRectEmpty();
 	CString expected;
-	expected.Format(_T("%s by Egyptian Eyes"), _T(_DIALTONE_VERSION));
+	expected.Format(_T("Dial-Tone %s by Egyptian Eyes"), _T(_DIALTONE_VERSION));
 	if (GetPaneText(0) != expected) {
 		return false;
 	}
@@ -125,7 +156,7 @@ bool StatusBar::GetPublisherLinkRect(CRect& rect)
 		pane.left += GetSystemMetrics(SM_CXSMICON) + 2;
 	}
 	CString prefix;
-	prefix.Format(_T("%s by "), _T(_DIALTONE_VERSION));
+	prefix.Format(_T("Dial-Tone %s by "), _T(_DIALTONE_VERSION));
 	CDC* dc = GetDC();
 	if (!dc) {
 		return false;
@@ -135,8 +166,9 @@ bool StatusBar::GetPublisherLinkRect(CRect& rect)
 	int publisherWidth = dc->GetTextExtent(_T("Egyptian Eyes")).cx;
 	dc->SelectObject(oldFont);
 	ReleaseDC(dc);
+	if (pane.left + prefixWidth + publisherWidth > pane.right) return false;
 	rect.SetRect(pane.left + prefixWidth, pane.top,
-		min(pane.right, pane.left + prefixWidth + publisherWidth), pane.bottom);
+		pane.left + prefixWidth + publisherWidth, pane.bottom);
 	return !rect.IsRectEmpty();
 }
 

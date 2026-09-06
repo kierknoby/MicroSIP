@@ -23,95 +23,15 @@
 #include "global.h"
 #include "Preview.h"
 #include "langpack.h"
-#include "DarkPalette.h"
 #include <afxshellmanager.h>
-#include <dwmapi.h>
-#include <uxtheme.h>
 
-class CDialToneSettingsDlg : public CDialog
-{
-public:
-	CDialToneSettingsDlg(CString& value, CWnd* parent)
-		: CDialog(IDD_DIAL_TONE_SETTINGS, parent), selection(value) {}
-
-protected:
-	BOOL OnInitDialog()
-	{
-		CDialog::OnInitDialog();
-		TranslateDialog(m_hWnd);
-		int checked = IDC_DIAL_TONE_350_440;
-		if (selection == _T("400")) checked = IDC_DIAL_TONE_400;
-		else if (selection == _T("425")) checked = IDC_DIAL_TONE_425;
-		else if (selection == _T("440")) checked = IDC_DIAL_TONE_440;
-		else if (selection == _T("450")) checked = IDC_DIAL_TONE_450;
-		CheckRadioButton(IDC_DIAL_TONE_350_440, IDC_DIAL_TONE_450, checked);
-		BOOL dark = accountSettings.darkMode;
-		DwmSetWindowAttribute(m_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-		for (CWnd* child = GetWindow(GW_CHILD); child; child = child->GetNextWindow())
-			SetWindowTheme(child->m_hWnd, dark ? L"DarkMode_Explorer" : NULL, NULL);
-		return TRUE;
-	}
-
-	void OnOK()
-	{
-		int checked = GetCheckedRadioButton(IDC_DIAL_TONE_350_440, IDC_DIAL_TONE_450);
-		static const LPCTSTR values[] = { _T("350+440"), _T("400"), _T("425"), _T("440"), _T("450") };
-		selection = values[max(0, min(4, checked - IDC_DIAL_TONE_350_440))];
-		dial_tone_sample_stop();
-		CDialog::OnOK();
-	}
-
-	void OnCancel()
-	{
-		dial_tone_sample_stop();
-		CDialog::OnCancel();
-	}
-
-	afx_msg void OnDestroy()
-	{
-		dial_tone_sample_stop();
-		CDialog::OnDestroy();
-	}
-
-	afx_msg void OnSample(UINT controlId)
-	{
-		static const LPCTSTR values[] = { _T("350+440"), _T("400"), _T("425"), _T("440"), _T("450") };
-		int index = controlId - IDC_DIAL_TONE_SAMPLE_350_440;
-		if (index >= 0 && index < 5) {
-			pj_status_t status = dial_tone_sample(values[index]);
-			if (status != PJ_SUCCESS) MSIP::ShowErrorMessage(status);
-		}
-	}
-
-	afx_msg BOOL OnEraseBkgnd(CDC* dc)
-	{
-		if (!accountSettings.darkMode) return CDialog::OnEraseBkgnd(dc);
-		CRect rect; GetClientRect(&rect); dc->FillSolidRect(rect, DarkPalette::Window()); return TRUE;
-	}
-
-	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd* child, UINT type)
-	{
-		if (accountSettings.darkMode) {
-			static CBrush panel(DarkPalette::Window());
-			dc->SetTextColor(DarkPalette::Text());
-			if (type == CTLCOLOR_STATIC || type == CTLCOLOR_DLG) {
-				dc->SetBkColor(DarkPalette::Window());
-				return panel;
-			}
-		}
-		return CDialog::OnCtlColor(dc, child, type);
-	}
-
-	DECLARE_MESSAGE_MAP()
-	CString& selection;
+static const LPCTSTR dialTonePresetValues[] = {
+	_T("350+440"), _T("400"), _T("425"), _T("440"), _T("450")
 };
 
-BEGIN_MESSAGE_MAP(CDialToneSettingsDlg, CDialog)
-	ON_CONTROL_RANGE(BN_CLICKED, IDC_DIAL_TONE_SAMPLE_350_440, IDC_DIAL_TONE_SAMPLE_450, OnSample)
-	ON_WM_DESTROY()
-	ON_WM_ERASEBKGND()
-	ON_WM_CTLCOLOR()
-END_MESSAGE_MAP()
+static const LPCTSTR dialTonePresetLabels[] = {
+	_T("350+440 Hz (default)"), _T("400 Hz"), _T("425 Hz"), _T("440 Hz"), _T("450 Hz")
+};
 
 static CString defaultActionItems[] = {
 _T(""),
@@ -447,6 +367,14 @@ BOOL SettingsDlg::OnInitDialog()
 	((CButton*)GetDlgItem(IDC_SETTINGS_DISMESS))->SetCheck(accountSettings.disableMessaging);
 	((CButton*)GetDlgItem(IDC_SETTINGS_DISABLE_NAME_LOOKUP))->SetCheck(accountSettings.disableNameLookup);
 	((CButton*)GetDlgItem(IDC_SETTINGS_ENABLE_LOCAL))->SetCheck(accountSettings.enableLocalAccount);
+	((CButton*)GetDlgItem(IDC_SETTINGS_DARK_MODE))->SetCheck(accountSettings.darkMode);
+
+	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_DIAL_TONE);
+	combobox->SetCurSel(0);
+	for (i = 0; i < _countof(dialTonePresetValues); i++) {
+		combobox->AddString(dialTonePresetLabels[i]);
+		if (dialTonePreset == dialTonePresetValues[i]) combobox->SetCurSel(i);
+	}
 
 	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_UPDATES_INTERVAL);
 	combobox->AddString(Translate(_T("Daily")));
@@ -561,7 +489,8 @@ BEGIN_MESSAGE_MAP(SettingsDlg, CDialog)
 	ON_BN_CLICKED(IDC_SETTINGS_AA_OPTIONS, &SettingsDlg::OnBnClickedAAOptions)
 	ON_BN_CLICKED(IDC_SETTINGS_DNS_SRV_CHECKBOX, &SettingsDlg::OnBnClickedDnsSrv)
 	ON_BN_CLICKED(IDC_SETTINGS_STUN_CHECKBOX, &SettingsDlg::OnBnClickedStun)
-	ON_BN_CLICKED(IDC_SETTINGS_DIAL_TONE, &SettingsDlg::OnBnClickedDialTone)
+	ON_BN_CLICKED(IDC_SETTINGS_DIAL_TONE_SAMPLE, &SettingsDlg::OnBnClickedDialToneSample)
+	ON_CBN_SELCHANGE(IDC_SETTINGS_DIAL_TONE, &SettingsDlg::OnCbnSelchangeDialTone)
 END_MESSAGE_MAP()
 
 void SettingsDlg::OnClose()
@@ -688,6 +617,9 @@ LRESULT SettingsDlg::OnUpdateSettings(WPARAM wParam, LPARAM lParam)
 
 	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_AUTO_ANSWER);
 	accountSettings.autoAnswer = autoAnswerValues.GetAt(combobox->GetCurSel());
+	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_DIAL_TONE);
+	i = combobox->GetCurSel();
+	dialTonePreset = dialTonePresetValues[i >= 0 && i < _countof(dialTonePresetValues) ? i : 0];
 	accountSettings.dialTonePreset = dialTonePreset;
 
 	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_FWD);
@@ -723,6 +655,11 @@ LRESULT SettingsDlg::OnUpdateSettings(WPARAM wParam, LPARAM lParam)
 	accountSettings.autoRecording = ((CButton*)GetDlgItem(IDC_SETTINGS_RECORDING_CHECKBOX))->GetCheck();
 	accountSettings.recordingButton = ((CButton*)GetDlgItem(IDC_SETTINGS_RECORDING_BUTTON))->GetCheck();
 	accountSettings.enableLocalAccount = ((CButton*)GetDlgItem(IDC_SETTINGS_ENABLE_LOCAL))->GetCheck();
+	bool darkMode = ((CButton*)GetDlgItem(IDC_SETTINGS_DARK_MODE))->GetCheck() != 0;
+	if (accountSettings.darkMode != darkMode) {
+		accountSettings.darkMode = darkMode;
+		mainDlg->ApplyDarkMode();
+	}
 
 	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_UPDATES_INTERVAL);
 	i = combobox->GetCurSel();
@@ -781,10 +718,21 @@ void SettingsDlg::OnBnClickedBrowse()
 	}
 }
 
-void SettingsDlg::OnBnClickedDialTone()
+void SettingsDlg::OnBnClickedDialToneSample()
 {
-	CDialToneSettingsDlg dialog(dialTonePreset, this);
-	dialog.DoModal();
+	CComboBox* combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_DIAL_TONE);
+	int selection = combobox->GetCurSel();
+	dialTonePreset = dialTonePresetValues[selection >= 0 && selection < _countof(dialTonePresetValues) ? selection : 0];
+	pj_status_t status = dial_tone_sample(dialTonePreset);
+	if (status != PJ_SUCCESS) MSIP::ShowErrorMessage(status);
+}
+
+void SettingsDlg::OnCbnSelchangeDialTone()
+{
+	dial_tone_sample_stop();
+	CComboBox* combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_DIAL_TONE);
+	int selection = combobox->GetCurSel();
+	dialTonePreset = dialTonePresetValues[selection >= 0 && selection < _countof(dialTonePresetValues) ? selection : 0];
 }
 
 void SettingsDlg::OnChangeRingtone()

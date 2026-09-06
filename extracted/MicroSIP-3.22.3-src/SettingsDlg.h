@@ -93,6 +93,7 @@ public:
 	afx_msg void OnBnClickedAAOptions();
 	afx_msg void OnBnClickedDnsSrv();
 	afx_msg void OnBnClickedStun();
-	afx_msg void OnBnClickedDialTone();
+	afx_msg void OnBnClickedDialToneSample();
+	afx_msg void OnCbnSelchangeDialTone();
 };
 

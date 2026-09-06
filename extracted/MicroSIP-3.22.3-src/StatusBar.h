@@ -8,6 +8,8 @@ class StatusBar : public CStatusBar
 public: 
 	StatusBar();
 	virtual ~StatusBar();
+	void RefreshPublisherLink();
+	virtual BOOL PreTranslateMessage(MSG* message);
 protected: 
 	DECLARE_MESSAGE_MAP()
 public: 
@@ -18,4 +20,6 @@ public:
 	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message);
 private:
 	bool GetPublisherLinkRect(CRect& rect);
+	CToolTipCtrl publisherTooltip;
+	bool publisherTooltipAdded = false;
 };
