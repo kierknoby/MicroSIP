@@ -411,6 +411,8 @@ struct call_tonegen_data *call_init_tonegen(pjsua_call_id call_id);
 BOOL call_play_digit(pjsua_call_id call_id, const char *digits, int duration = 160);
 void call_deinit_tonegen(pjsua_call_id call_id);
 pj_status_t dial_tone_start();
+pj_status_t dial_tone_sample(CString preset);
+void dial_tone_sample_stop();
 const char* dial_tone_error_stage();
 void dial_tone_stop();
 bool dial_tone_is_active();

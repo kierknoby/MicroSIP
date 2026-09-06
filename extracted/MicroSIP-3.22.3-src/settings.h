@@ -30,6 +30,7 @@ struct AccountSettings {
 	CString audioRingDevice;
 	CString audioOutputDevice;
 	CString audioInputDevice;
+	CString dialTonePreset;
 	bool micAmplification;
 	bool swLevelAdjustment;
 	CString audioCodecs;

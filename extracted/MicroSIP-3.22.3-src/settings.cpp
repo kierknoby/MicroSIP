@@ -293,6 +293,12 @@ void AccountSettings::Init()
     ptr = audioInputDevice.GetBuffer(255);
     GetPrivateProfileString(section, _T("audioInputDevice"), NULL, ptr, 256, iniFile);
     audioInputDevice.ReleaseBuffer();
+	ptr = dialTonePreset.GetBuffer(31);
+	GetPrivateProfileString(section, _T("dialTonePreset"), _T("350+440"), ptr, 32, iniFile);
+	dialTonePreset.ReleaseBuffer();
+	if (dialTonePreset != _T("350+440") && dialTonePreset != _T("400")
+		&& dialTonePreset != _T("425") && dialTonePreset != _T("440")
+		&& dialTonePreset != _T("450")) dialTonePreset = _T("350+440");
 
 
     ptr = str.GetBuffer(255);
@@ -1098,6 +1104,7 @@ void AccountSettings::SettingsSave()
     WritePrivateProfileString(section, _T("audioRingDevice"), _T("\"") + audioRingDevice + _T("\""), iniFile);
     WritePrivateProfileString(section, _T("audioOutputDevice"), _T("\"") + audioOutputDevice + _T("\""), iniFile);
     WritePrivateProfileString(section, _T("audioInputDevice"), _T("\"") + audioInputDevice + _T("\""), iniFile);
+	WritePrivateProfileString(section, _T("dialTonePreset"), dialTonePreset, iniFile);
     WritePrivateProfileString(section, _T("micAmplification"), micAmplification ? _T("1") : _T("0"), iniFile);
     WritePrivateProfileString(section, _T("swLevelAdjustment"), swLevelAdjustment ? _T("1") : _T("0"), iniFile);
     WritePrivateProfileString(section, _T("audioCodecs"), audioCodecs, iniFile);

@@ -384,19 +384,30 @@ struct call_tonegen_data* call_init_tonegen(pjsua_call_id call_id)
 
 static call_tonegen_data* dialTone = NULL;
 static const char* dialToneErrorStage = "not started";
+static bool dialToneIsSample = false;
+static CString dialToneActivePreset;
 
 const char* dial_tone_error_stage()
 {
 	return dialToneErrorStage;
 }
 
-pj_status_t dial_tone_start()
+static CString normalized_dial_tone_preset(CString preset)
+{
+	if (preset != _T("350+440") && preset != _T("400") && preset != _T("425")
+		&& preset != _T("440") && preset != _T("450")) return _T("350+440");
+	return preset;
+}
+
+static pj_status_t dial_tone_start_preset(CString preset, bool sample)
 {
 	dial_tone_stop();
+	preset = normalized_dial_tone_preset(preset);
 	dialToneErrorStage = "SIP media subsystem";
 	if (!is_pjsua_running()) {
 		return PJ_EINVALIDOP;
 	}
+	if (sample && !pjsua_snd_is_active()) msip_set_sound_device(msip_audio_output);
 	dialToneErrorStage = "tone memory allocation";
 	pj_pool_t* pool = pjsua_pool_create("dial_tone", 512, 512);
 	if (!pool) {
@@ -412,15 +423,22 @@ pj_status_t dial_tone_start()
 		status = pjsua_conf_add_port(pool, tone->tonegen, &tone->toneslot);
 	}
 	if (status == PJ_SUCCESS) {
-		dialToneErrorStage = "350 + 450 Hz tone generation";
-		pjmedia_tone_desc ukTone;
-		pj_bzero(&ukTone, sizeof(ukTone));
-		ukTone.freq1 = 350;
-		ukTone.freq2 = 450;
-		// One second contains a whole number of cycles at both frequencies, so the loop joins cleanly.
-		ukTone.on_msec = 1000;
-		ukTone.volume = 6000;
-		status = pjmedia_tonegen_play(tone->tonegen, 1, &ukTone, PJMEDIA_TONEGEN_LOOP);
+		dialToneErrorStage = "selected tone generation";
+		pjmedia_tone_desc selectedTone;
+		pj_bzero(&selectedTone, sizeof(selectedTone));
+		if (preset == _T("350+440")) {
+			selectedTone.freq1 = 350;
+			selectedTone.freq2 = 440;
+			// Lower each component so their simultaneous sum stays unclipped and comparable.
+			selectedTone.volume = 4000;
+		}
+		else {
+			selectedTone.freq1 = _ttoi(preset);
+			selectedTone.volume = 6000;
+		}
+		// One second gives every supported frequency an integral number of cycles.
+		selectedTone.on_msec = 1000;
+		status = pjmedia_tonegen_play(tone->tonegen, 1, &selectedTone, PJMEDIA_TONEGEN_LOOP);
 	}
 	if (status == PJ_SUCCESS) {
 		pjsua_conf_adjust_rx_level(tone->toneslot, 0.0f);
@@ -438,6 +456,8 @@ pj_status_t dial_tone_start()
 		return status;
 	}
 	dialTone = tone;
+	dialToneIsSample = sample;
+	dialToneActivePreset = preset;
 	dialToneErrorStage = "none";
 	// A short gain ramp supplements PJMEDIA's tone fade and avoids a click at the sound-device boundary.
 	for (int step = 1; step <= 4; ++step) {
@@ -447,10 +467,32 @@ pj_status_t dial_tone_start()
 	return PJ_SUCCESS;
 }
 
+pj_status_t dial_tone_start()
+{
+	return dial_tone_start_preset(accountSettings.dialTonePreset, false);
+}
+
+pj_status_t dial_tone_sample(CString preset)
+{
+	preset = normalized_dial_tone_preset(preset);
+	if (dialTone && dialToneIsSample && dialToneActivePreset == preset) {
+		dial_tone_stop();
+		return PJ_SUCCESS;
+	}
+	return dial_tone_start_preset(preset, true);
+}
+
+void dial_tone_sample_stop()
+{
+	if (dialToneIsSample) dial_tone_stop();
+}
+
 void dial_tone_stop()
 {
 	call_tonegen_data* tone = dialTone;
 	dialTone = NULL;
+	dialToneIsSample = false;
+	dialToneActivePreset.Empty();
 	if (!tone) {
 		return;
 	}

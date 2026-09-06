@@ -23,7 +23,95 @@
 #include "global.h"
 #include "Preview.h"
 #include "langpack.h"
+#include "DarkPalette.h"
 #include <afxshellmanager.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
+
+class CDialToneSettingsDlg : public CDialog
+{
+public:
+	CDialToneSettingsDlg(CString& value, CWnd* parent)
+		: CDialog(IDD_DIAL_TONE_SETTINGS, parent), selection(value) {}
+
+protected:
+	BOOL OnInitDialog()
+	{
+		CDialog::OnInitDialog();
+		TranslateDialog(m_hWnd);
+		int checked = IDC_DIAL_TONE_350_440;
+		if (selection == _T("400")) checked = IDC_DIAL_TONE_400;
+		else if (selection == _T("425")) checked = IDC_DIAL_TONE_425;
+		else if (selection == _T("440")) checked = IDC_DIAL_TONE_440;
+		else if (selection == _T("450")) checked = IDC_DIAL_TONE_450;
+		CheckRadioButton(IDC_DIAL_TONE_350_440, IDC_DIAL_TONE_450, checked);
+		BOOL dark = accountSettings.darkMode;
+		DwmSetWindowAttribute(m_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+		for (CWnd* child = GetWindow(GW_CHILD); child; child = child->GetNextWindow())
+			SetWindowTheme(child->m_hWnd, dark ? L"DarkMode_Explorer" : NULL, NULL);
+		return TRUE;
+	}
+
+	void OnOK()
+	{
+		int checked = GetCheckedRadioButton(IDC_DIAL_TONE_350_440, IDC_DIAL_TONE_450);
+		static const LPCTSTR values[] = { _T("350+440"), _T("400"), _T("425"), _T("440"), _T("450") };
+		selection = values[max(0, min(4, checked - IDC_DIAL_TONE_350_440))];
+		dial_tone_sample_stop();
+		CDialog::OnOK();
+	}
+
+	void OnCancel()
+	{
+		dial_tone_sample_stop();
+		CDialog::OnCancel();
+	}
+
+	afx_msg void OnDestroy()
+	{
+		dial_tone_sample_stop();
+		CDialog::OnDestroy();
+	}
+
+	afx_msg void OnSample(UINT controlId)
+	{
+		static const LPCTSTR values[] = { _T("350+440"), _T("400"), _T("425"), _T("440"), _T("450") };
+		int index = controlId - IDC_DIAL_TONE_SAMPLE_350_440;
+		if (index >= 0 && index < 5) {
+			pj_status_t status = dial_tone_sample(values[index]);
+			if (status != PJ_SUCCESS) MSIP::ShowErrorMessage(status);
+		}
+	}
+
+	afx_msg BOOL OnEraseBkgnd(CDC* dc)
+	{
+		if (!accountSettings.darkMode) return CDialog::OnEraseBkgnd(dc);
+		CRect rect; GetClientRect(&rect); dc->FillSolidRect(rect, DarkPalette::Window()); return TRUE;
+	}
+
+	afx_msg HBRUSH OnCtlColor(CDC* dc, CWnd* child, UINT type)
+	{
+		if (accountSettings.darkMode) {
+			static CBrush panel(DarkPalette::Window());
+			dc->SetTextColor(DarkPalette::Text());
+			if (type == CTLCOLOR_STATIC || type == CTLCOLOR_DLG) {
+				dc->SetBkColor(DarkPalette::Window());
+				return panel;
+			}
+		}
+		return CDialog::OnCtlColor(dc, child, type);
+	}
+
+	DECLARE_MESSAGE_MAP()
+	CString& selection;
+};
+
+BEGIN_MESSAGE_MAP(CDialToneSettingsDlg, CDialog)
+	ON_CONTROL_RANGE(BN_CLICKED, IDC_DIAL_TONE_SAMPLE_350_440, IDC_DIAL_TONE_SAMPLE_450, OnSample)
+	ON_WM_DESTROY()
+	ON_WM_ERASEBKGND()
+	ON_WM_CTLCOLOR()
+END_MESSAGE_MAP()
 
 static CString defaultActionItems[] = {
 _T(""),
@@ -77,6 +165,7 @@ BOOL SettingsDlg::OnInitDialog()
 
 	aaOptionsDlg = NULL;
 	featureCodesDlg = NULL;
+	dialTonePreset = accountSettings.dialTonePreset;
 
 	TranslateDialog(this->m_hWnd);
 
@@ -410,6 +499,7 @@ BOOL SettingsDlg::OnInitDialog()
 
 void SettingsDlg::OnDestroy()
 {
+	dial_tone_sample_stop();
 	mainDlg->settingsDlg = NULL;
 	CDialog::OnDestroy();
 }
@@ -471,10 +561,12 @@ BEGIN_MESSAGE_MAP(SettingsDlg, CDialog)
 	ON_BN_CLICKED(IDC_SETTINGS_AA_OPTIONS, &SettingsDlg::OnBnClickedAAOptions)
 	ON_BN_CLICKED(IDC_SETTINGS_DNS_SRV_CHECKBOX, &SettingsDlg::OnBnClickedDnsSrv)
 	ON_BN_CLICKED(IDC_SETTINGS_STUN_CHECKBOX, &SettingsDlg::OnBnClickedStun)
+	ON_BN_CLICKED(IDC_SETTINGS_DIAL_TONE, &SettingsDlg::OnBnClickedDialTone)
 END_MESSAGE_MAP()
 
 void SettingsDlg::OnClose()
 {
+	dial_tone_sample_stop();
 	DestroyWindow();
 }
 
@@ -596,6 +688,7 @@ LRESULT SettingsDlg::OnUpdateSettings(WPARAM wParam, LPARAM lParam)
 
 	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_AUTO_ANSWER);
 	accountSettings.autoAnswer = autoAnswerValues.GetAt(combobox->GetCurSel());
+	accountSettings.dialTonePreset = dialTonePreset;
 
 	combobox = (CComboBox*)GetDlgItem(IDC_SETTINGS_FWD);
 	accountSettings.forwarding = forwardingValues.GetAt(combobox->GetCurSel());
@@ -686,6 +779,12 @@ void SettingsDlg::OnBnClickedBrowse()
 			GetDlgItem(IDC_SETTINGS_RINGTONE)->SetWindowText(dlgFile.GetPathName());
 		}
 	}
+}
+
+void SettingsDlg::OnBnClickedDialTone()
+{
+	CDialToneSettingsDlg dialog(dialTonePreset, this);
+	dialog.DoModal();
 }
 
 void SettingsDlg::OnChangeRingtone()

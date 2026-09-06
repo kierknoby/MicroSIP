@@ -38,6 +38,7 @@ protected:
 	CStringArray autoAnswerValues;
 	CStringArray forwardingValues;
 	CStringArray denyIncomingValues;
+	CString dialTonePreset;
 
 	virtual BOOL OnInitDialog();
 	afx_msg void OnDestroy();
@@ -92,5 +93,6 @@ public:
 	afx_msg void OnBnClickedAAOptions();
 	afx_msg void OnBnClickedDnsSrv();
 	afx_msg void OnBnClickedStun();
+	afx_msg void OnBnClickedDialTone();
 };
 
