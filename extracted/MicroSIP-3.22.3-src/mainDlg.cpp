@@ -3579,9 +3579,16 @@ void CmainDlg::InitUI()
 {
 	onMWIInfo(0, 0); // voicemail button
 	SetPaneText2();
-    SetWindowText(_T(_GLOBAL_NAME_VISIBLE));
+	SetProductWindowTitle();
 	UpdateWindowText();
 	pageDialer->SetName();
+}
+
+void CmainDlg::SetProductWindowTitle()
+{
+	CString title;
+	title.Format(_T("%s %s"), _T(_GLOBAL_NAME_VISIBLE), _T(_DIALTONE_VERSION));
+	SetWindowText(title);
 }
 
 void CmainDlg::ShowTrayIcon()
@@ -4153,7 +4160,7 @@ void CmainDlg::MainPopupMenu(bool isMenuButton)
 		separator = true;
 	}
 	str = Translate(_T("Help"));
-    str.AppendFormat(_T("\tv%s"), _T(_GLOBAL_VERSION));
+    str.AppendFormat(_T("\tv%s"), _T(_DIALTONE_VERSION));
 	tracker->AppendMenu(MF_STRING, ID_MENU_HELP, str);
 	separator = false;
 
@@ -5229,27 +5236,8 @@ void CmainDlg::PJAccountAddRaw()
 {
 	CString str;
 
-	CString title = _T(_GLOBAL_NAME_VISIBLE);
-	CString titleAdder;
-	CString usernameLocal;
-	usernameLocal = accountSettings.account.username;
-	if (!accountSettings.account.label.IsEmpty())
-	{
-		titleAdder = accountSettings.account.label;
-	}
-	else if (!accountSettings.account.displayName.IsEmpty())
-	{
-		titleAdder = accountSettings.account.displayName;
-	}
-	else if (!usernameLocal.IsEmpty())
-	{
-		titleAdder = usernameLocal;
-	}
-	if (!titleAdder.IsEmpty()) {
-		title.AppendFormat(_T(" - %s"), titleAdder);
-	}
+	SetProductWindowTitle();
 	SetPaneText2(get_account_server());
-	SetWindowText(title);
 	pageDialer->SetName();
 
 	pjsua_acc_config acc_cfg;

@@ -96,12 +96,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", _GLOBAL_COMPANY
             VALUE "LegalCopyright", "Copyright (c) 2011-2025, MicroSIP (www.microsip.org). All rights reserved."
-            VALUE "FileDescription", _GLOBAL_NAME
-            VALUE "FileVersion", _GLOBAL_VERSION
+            VALUE "FileDescription", _GLOBAL_NAME_VISIBLE
+            VALUE "FileVersion", _DIALTONE_VERSION
             VALUE "InternalName", _GLOBAL_NAME
             VALUE "OriginalFilename", _GLOBAL_NAME ".exe"
-            VALUE "ProductName", _GLOBAL_NAME_NICE
-            VALUE "ProductVersion", _GLOBAL_VERSION
+            VALUE "ProductName", _GLOBAL_NAME_VISIBLE
+            VALUE "ProductVersion", _DIALTONE_VERSION
         END
     END
     BLOCK "VarFileInfo"

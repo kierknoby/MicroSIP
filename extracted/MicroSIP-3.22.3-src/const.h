@@ -17,8 +17,10 @@
  */
 
 #pragma once
-#define _GLOBAL_VERSION "3.22.3"
-#define _GLOBAL_VERSION_COMMA 3,22,3,5
+#define _GLOBAL_VERSION "3.22.12"
+#define _GLOBAL_VERSION_COMMA 3,22,12,5
+#define _DIALTONE_REVISION "dt0"
+#define _DIALTONE_VERSION _GLOBAL_VERSION "-" _DIALTONE_REVISION
 #define _GLOBAL_KEY "*********"
 #define _GLOBAL_VIDEO
 #define _GLOBAL_NAME "MicroSIP"

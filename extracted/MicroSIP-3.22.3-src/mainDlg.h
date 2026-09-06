@@ -112,6 +112,7 @@ public:
 	CList<int> confernceCalls;
 	
 	void InitUI();
+	void SetProductWindowTitle();
 	void ShowTrayIcon();
 	void OnCreated();
 	void PJCreate();

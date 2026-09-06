@@ -1,4 +1,4 @@
-name: Build MicroSIP for Windows
+name: Build Dial-Tone for Windows
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-win32-release:
-    name: MicroSIP Win32 Release
+    name: Dial-Tone Win32 Release
     runs-on: windows-2022
     env:
       MICROSIP_SOURCE_DIR: extracted\MicroSIP-3.22.3-src
@@ -109,7 +109,7 @@ jobs:
             throw "Expected PJProject library was not produced: $pjprojectLibrary"
           }
 
-      - name: Build MicroSIP Win32 Release
+      - name: Build Dial-Tone Win32 Release
         shell: pwsh
         run: |
           $buildRoot = Join-Path $env:RUNNER_TEMP 'microsip-build'
@@ -130,11 +130,30 @@ jobs:
             throw "Expected executable was not produced: $executable"
           }
 
+          $versionHeader = Get-Content (Join-Path $projectDir 'const.h') -Raw
+          $upstreamMatch = [regex]::Match($versionHeader, '(?m)^#define\s+_GLOBAL_VERSION\s+"([^"]+)"')
+          $revisionMatch = [regex]::Match($versionHeader, '(?m)^#define\s+_DIALTONE_REVISION\s+"([^"]+)"')
+          if (!$upstreamMatch.Success -or !$revisionMatch.Success) {
+            throw 'Unable to read Dial-Tone version components from const.h'
+          }
+          $displayVersion = "$($upstreamMatch.Groups[1].Value)-$($revisionMatch.Groups[1].Value)"
+          $expectedTag = "v$displayVersion"
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($revisionMatch.Groups[1].Value -notmatch '^dt[1-9][0-9]*$') {
+              throw "Development revision '$($revisionMatch.Groups[1].Value)' cannot be used for a release tag"
+            }
+            if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+              throw "Release tag '$env:GITHUB_REF_NAME' does not match '$expectedTag'"
+            }
+          }
+          $publicExecutable = Join-Path $artifactDir "Dial-Tone_$displayVersion.exe"
+          Move-Item $executable $publicExecutable -Force
+
           Get-ChildItem $artifactDir -Force | Format-Table Name, Length
 
-      - name: Upload MicroSIP Win32 Release artifact
+      - name: Upload Dial-Tone Win32 Release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroSIP-Win32-Release
+          name: Dial-Tone-Win32-Release
           path: ${{ runner.temp }}/microsip-build/artifact
           if-no-files-found: error
