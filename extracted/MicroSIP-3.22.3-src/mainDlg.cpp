@@ -143,7 +143,7 @@ protected:
 	BOOL OnInitDialog()
 	{
 		CDialog::OnInitDialog();
-		url = custom ? accountSettings.brandingUrl : _T("https://egyptianeyes.com");
+		url = custom ? accountSettings.brandingUrl : _T("https://dial-tone.uk");
 		SetDlgItemText(IDC_BRANDING_URL, url);
 		GetDlgItem(IDC_BRANDING_URL)->EnableWindow(custom);
 		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(!custom);
@@ -214,7 +214,7 @@ protected:
 
 	afx_msg void OnRestoreDefault()
 	{
-		custom = false; stagedSource.Empty(); url = _T("https://egyptianeyes.com");
+		custom = false; stagedSource.Empty(); url = _T("https://dial-tone.uk");
 		SetDlgItemText(IDC_BRANDING_URL, url); GetDlgItem(IDC_BRANDING_URL)->EnableWindow(FALSE);
 		((CEdit*)GetDlgItem(IDC_BRANDING_URL))->SetReadOnly(TRUE);
 		LoadPreview(CString(), true);
@@ -281,12 +281,15 @@ END_MESSAGE_MAP()
 class CmainDlg::CFreepbxFooter : public CWnd
 {
 public:
-	CFreepbxFooter() : image(NULL), stream(NULL), handCursor(NULL) {}
+	CFreepbxFooter() : image(NULL), stream(NULL), handCursor(NULL), tooltipAdded(false) {}
 	~CFreepbxFooter()
 	{
 		delete image;
 		if (stream) {
 			stream->Release();
+		}
+		if (::IsWindow(tooltip.m_hWnd)) {
+			tooltip.DestroyWindow();
 		}
 	}
 
@@ -294,11 +297,15 @@ public:
 	{
 		delete image; image = NULL;
 		if (stream) { stream->Release(); stream = NULL; }
-		logoUrl = accountSettings.brandingCustom ? accountSettings.brandingUrl : _T("https://egyptianeyes.com");
+		logoUrl = accountSettings.brandingCustom ? accountSettings.brandingUrl : _T("https://dial-tone.uk");
 		bool loaded = accountSettings.brandingCustom
 			? LoadBitmapFile(BrandingLogoPath(), image, stream)
 			: LoadBitmapResource(image, stream);
 		logoClickable = loaded && !logoUrl.IsEmpty() && ValidBrandingUrl(logoUrl);
+		if (::IsWindow(tooltip.m_hWnd) && tooltipAdded) {
+			tooltip.DelTool(this, 1);
+			tooltipAdded = false;
+		}
 		return loaded;
 	}
 
@@ -318,7 +325,7 @@ protected:
 		const int attributionHeight = MulDiv(12, dpiY, 96);
 		Gdiplus::Font font(L"Segoe UI", (Gdiplus::REAL)MulDiv(8, dpiY, 96), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
 		const int logoDisplayHeight = max(0,
-			client.Height() - verticalPadding * 2 - contentGap * 2 - attributionHeight * 2);
+			client.Height() - verticalPadding * 2 - contentGap - attributionHeight);
 		const int availableWidth = max(0, client.Width() - horizontalMargin * 2);
 		const UINT sourceWidth = image ? image->GetWidth() : 0;
 		const UINT sourceHeight = image ? image->GetHeight() : 0;
@@ -331,6 +338,7 @@ protected:
 		int left = (client.Width() - width) / 2;
 		int top = verticalPadding + (logoDisplayHeight - height) / 2;
 		freepbxLinkRect = logoClickable ? CRect(left, top, left + width, top + height) : CRect(0, 0, 0, 0);
+		UpdateLogoTooltip(freepbxLinkRect);
 		if (width > 0 && height > 0) {
 			graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
 			graphics.DrawImage(image, Gdiplus::Rect(left, top, width, height));
@@ -339,26 +347,6 @@ protected:
 		Gdiplus::SolidBrush textBrush(accountSettings.darkMode ? Gdiplus::Color(255, 190, 196, 202) : Gdiplus::Color(255, 100, 100, 100));
 		Gdiplus::SolidBrush linkBrush(Gdiplus::Color(255, 40, 90, 150));
 		Gdiplus::RectF measured;
-		const WCHAR* version = _T(_DIALTONE_VERSION);
-		const WCHAR* productSeparator = L" by ";
-		const WCHAR* publisher = L"Egyptian Eyes";
-		graphics.MeasureString(version, -1, &font, Gdiplus::PointF(0, 0), &measured);
-		Gdiplus::REAL versionWidth = measured.Width;
-		graphics.MeasureString(productSeparator, -1, &font, Gdiplus::PointF(0, 0), &measured);
-		Gdiplus::REAL productSeparatorWidth = measured.Width;
-		graphics.MeasureString(publisher, -1, &font, Gdiplus::PointF(0, 0), &measured);
-		Gdiplus::REAL publisherWidth = measured.Width;
-		Gdiplus::REAL productWidth = versionWidth + productSeparatorWidth + publisherWidth;
-		Gdiplus::REAL productX = (Gdiplus::REAL)((client.Width() - productWidth) / 2);
-		Gdiplus::REAL productY = (Gdiplus::REAL)(verticalPadding + logoDisplayHeight + contentGap);
-		graphics.DrawString(version, -1, &font, Gdiplus::PointF(productX, productY), &textBrush);
-		productX += versionWidth;
-		graphics.DrawString(productSeparator, -1, &font, Gdiplus::PointF(productX, productY), &textBrush);
-		productX += productSeparatorWidth;
-		egyptianEyesLinkRect = CRect((int)productX, (int)productY,
-			(int)(productX + publisherWidth), (int)(productY + attributionHeight));
-		graphics.DrawString(publisher, -1, &font, Gdiplus::PointF(productX, productY), &linkBrush);
-
 		const WCHAR* prefix = L"Powered by ";
 		const WCHAR* link = L"MicroSIP";
 		const WCHAR* suffix = L" \x2013 SIP Softphone for Windows";
@@ -371,7 +359,7 @@ protected:
 		suffixWidth = measured.Width;
 		Gdiplus::REAL textWidth = prefixWidth + linkWidth + suffixWidth;
 		Gdiplus::REAL textX = (Gdiplus::REAL)((client.Width() - textWidth) / 2);
-		Gdiplus::REAL textY = productY + attributionHeight + contentGap;
+		Gdiplus::REAL textY = (Gdiplus::REAL)(verticalPadding + logoDisplayHeight + contentGap);
 		graphics.DrawString(prefix, -1, &font, Gdiplus::PointF(textX, textY), &textBrush);
 		textX += prefixWidth;
 		microsipLinkRect = CRect((int)textX, (int)textY, (int)(textX + linkWidth), (int)(textY + MulDiv(12, dpiY, 96)));
@@ -387,9 +375,6 @@ protected:
 		else if (microsipLinkRect.PtInRect(point)) {
 			ShellExecute(NULL, _T("open"), _T("https://www.microsip.org/"), NULL, NULL, SW_SHOWNORMAL);
 		}
-		else if (egyptianEyesLinkRect.PtInRect(point)) {
-			ShellExecute(NULL, _T("open"), _T("https://egyptianeyes.com"), NULL, NULL, SW_SHOWNORMAL);
-		}
 		CWnd::OnLButtonUp(nFlags, point);
 	}
 	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
@@ -397,8 +382,7 @@ protected:
 		CPoint point;
 		GetCursorPos(&point);
 		ScreenToClient(&point);
-		if ((logoClickable && freepbxLinkRect.PtInRect(point)) || microsipLinkRect.PtInRect(point)
-			|| egyptianEyesLinkRect.PtInRect(point)) {
+		if ((logoClickable && freepbxLinkRect.PtInRect(point)) || microsipLinkRect.PtInRect(point)) {
 			if (!handCursor) {
 				handCursor = LoadCursor(NULL, IDC_HAND);
 			}
@@ -407,17 +391,54 @@ protected:
 		}
 		return CWnd::OnSetCursor(pWnd, nHitTest, message);
 	}
+	virtual BOOL PreTranslateMessage(MSG* message)
+	{
+		if (::IsWindow(tooltip.m_hWnd)) tooltip.RelayEvent(message);
+		return CWnd::PreTranslateMessage(message);
+	}
 	DECLARE_MESSAGE_MAP()
 
 private:
+	CString TooltipText() const
+	{
+		CString display = logoUrl;
+		CString lower = display;
+		lower.MakeLower();
+		if (lower.Find(_T("http://")) == 0) display = display.Mid(7);
+		else if (lower.Find(_T("https://")) == 0) display = display.Mid(8);
+		if (display.Right(1) == _T("/") && display.Left(display.GetLength() - 1).Find(_T('/')) == -1)
+			display = display.Left(display.GetLength() - 1);
+		return display;
+	}
+	void UpdateLogoTooltip(const CRect& rect)
+	{
+		if (!logoClickable || rect.IsRectEmpty()) {
+			if (::IsWindow(tooltip.m_hWnd) && tooltipAdded) tooltip.DelTool(this, 1);
+			tooltipAdded = false;
+			return;
+		}
+		if (!::IsWindow(tooltip.m_hWnd)
+			&& !tooltip.Create(this, TTS_ALWAYSTIP | TTS_NOPREFIX)) return;
+		CString text = TooltipText();
+		if (!tooltipAdded) {
+			tooltip.AddTool(this, text, &rect, 1);
+			tooltipAdded = true;
+		}
+		else {
+			tooltip.SetToolRect(this, 1, &rect);
+			tooltip.UpdateTipText(text, this, 1);
+		}
+		tooltip.Activate(TRUE);
+	}
 	Gdiplus::Bitmap* image;
 	IStream* stream;
 	CRect freepbxLinkRect;
 	CRect microsipLinkRect;
-	CRect egyptianEyesLinkRect;
 	HCURSOR handCursor;
 	CString logoUrl;
 	bool logoClickable = false;
+	CToolTipCtrl tooltip;
+	bool tooltipAdded;
 };
 
 BEGIN_MESSAGE_MAP(CmainDlg::CFreepbxFooter, CWnd)
@@ -3404,6 +3425,7 @@ BOOL CmainDlg::OnInitDialog()
 	CRect mapRect;
 
 	m_bar.Create(this);
+	m_bar.GetStatusBarCtrl().ModifyStyle(SBARS_SIZEGRIP, 0);
 	CStatusBarCtrl& statusctrl = m_bar.GetStatusBarCtrl();
 	mapRect.bottom = 12;
 	MapDialogRect(&mapRect);
@@ -4175,7 +4197,7 @@ void CmainDlg::MainPopupMenu(bool isMenuButton)
 		tracker->AppendMenu(MF_SEPARATOR);
 		separator = true;
 	}
-	str = Translate(_T("Visit Website"));
+	str = _T("microsip.org");
 	str.Append(_T("\tCtrl+W"));
 	tracker->AppendMenu(MF_STRING, ID_MENU_WEBSITE, str);
 	separator = false;
@@ -5534,7 +5556,7 @@ void CmainDlg::UpdateWindowText(CString text, int icon, bool afterRegister)
 	if (isOffline) {
 		icon = IDI_DEFAULT;
 		if (MACRO_ENABLE_LOCAL_ACCOUNT) {
-			str = _T(_GLOBAL_NAME_VISIBLE);
+			str.Format(_T("%s by Egyptian Eyes"), _T(_DIALTONE_VERSION));
 		}
 		else {
 			str = Translate(_T("Offline"));

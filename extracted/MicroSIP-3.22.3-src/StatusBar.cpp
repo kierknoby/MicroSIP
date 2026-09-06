@@ -21,6 +21,7 @@
 #include "global.h"
 #include "settings.h"
 #include "DarkPalette.h"
+#include <shellapi.h>
 
  // StatusBar   
 IMPLEMENT_DYNAMIC(StatusBar, CStatusBar)
@@ -39,6 +40,7 @@ BEGIN_MESSAGE_MAP(StatusBar, CStatusBar)
 	ON_WM_LBUTTONUP()
 	ON_WM_MOUSEMOVE()
 	ON_WM_PAINT()
+	ON_WM_SETCURSOR()
 	//}}AFX_MSG_MAP   
 END_MESSAGE_MAP()
 
@@ -96,8 +98,57 @@ LRESULT StatusBar::OnIdleUpdateCmdUI(WPARAM wParam, LPARAM lParam)
 
 void StatusBar::OnLButtonUp(UINT nFlags, CPoint point)
 {
+	CRect publisher;
+	if (GetPublisherLinkRect(publisher) && publisher.PtInRect(point)) {
+		ShellExecute(NULL, _T("open"), _T("https://egyptianeyes.com"), NULL, NULL, SW_SHOWNORMAL);
+	}
+	CStatusBar::OnLButtonUp(nFlags, point);
 }
 
 void StatusBar::OnMouseMove(UINT nFlags, CPoint point)
 {
+	CStatusBar::OnMouseMove(nFlags, point);
+}
+
+bool StatusBar::GetPublisherLinkRect(CRect& rect)
+{
+	rect.SetRectEmpty();
+	CString expected;
+	expected.Format(_T("%s by Egyptian Eyes"), _T(_DIALTONE_VERSION));
+	if (GetPaneText(0) != expected) {
+		return false;
+	}
+	CRect pane;
+	GetItemRect(0, &pane);
+	pane.DeflateRect(2, 0);
+	if (GetStatusBarCtrl().GetIcon(0)) {
+		pane.left += GetSystemMetrics(SM_CXSMICON) + 2;
+	}
+	CString prefix;
+	prefix.Format(_T("%s by "), _T(_DIALTONE_VERSION));
+	CDC* dc = GetDC();
+	if (!dc) {
+		return false;
+	}
+	CFont* oldFont = dc->SelectObject(GetFont());
+	int prefixWidth = dc->GetTextExtent(prefix).cx;
+	int publisherWidth = dc->GetTextExtent(_T("Egyptian Eyes")).cx;
+	dc->SelectObject(oldFont);
+	ReleaseDC(dc);
+	rect.SetRect(pane.left + prefixWidth, pane.top,
+		min(pane.right, pane.left + prefixWidth + publisherWidth), pane.bottom);
+	return !rect.IsRectEmpty();
+}
+
+BOOL StatusBar::OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
+{
+	CPoint point;
+	GetCursorPos(&point);
+	ScreenToClient(&point);
+	CRect publisher;
+	if (GetPublisherLinkRect(publisher) && publisher.PtInRect(point)) {
+		SetCursor(LoadCursor(NULL, IDC_HAND));
+		return TRUE;
+	}
+	return CStatusBar::OnSetCursor(pWnd, nHitTest, message);
 }
