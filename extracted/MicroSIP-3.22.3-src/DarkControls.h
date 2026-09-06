@@ -57,7 +57,7 @@ protected:
 	bool m_wasEmpty;
 
 	afx_msg void OnPaint();
-	afx_msg void OnChange();
+	afx_msg BOOL OnChange();
 	DECLARE_MESSAGE_MAP()
 };
 

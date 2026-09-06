@@ -238,7 +238,7 @@ IMPLEMENT_DYNAMIC(CPlaceholderEdit, CEdit)
 
 BEGIN_MESSAGE_MAP(CPlaceholderEdit, CEdit)
 	ON_WM_PAINT()
-	ON_CONTROL_REFLECT(EN_CHANGE, OnChange)
+	ON_CONTROL_REFLECT_EX(EN_CHANGE, OnChange)
 END_MESSAGE_MAP()
 
 CPlaceholderEdit::CPlaceholderEdit()
@@ -263,13 +263,15 @@ void CPlaceholderEdit::SetDarkMode(bool enabled)
 	}
 }
 
-void CPlaceholderEdit::OnChange()
+BOOL CPlaceholderEdit::OnChange()
 {
 	bool empty = GetWindowTextLength() == 0;
 	if (empty != m_wasEmpty) {
 		m_wasEmpty = empty;
 		Invalidate();
 	}
+	// Let the parent observe the completed edit as well (for validation/persistence).
+	return FALSE;
 }
 
 void CPlaceholderEdit::OnPaint()

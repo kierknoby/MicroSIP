@@ -857,8 +857,9 @@ protected:
 	}
 	afx_msg void OnUndo()
 	{
-		if (mode == 1 && notes.SendMessage(EM_CANUNDO)) {
-			notes.SendMessage(EM_UNDO);
+		if (mode == 1 && notes.CanUndo()) {
+			notes.SetFocus();
+			notes.Undo();
 		}
 		UpdateActionStates();
 	}
@@ -902,7 +903,7 @@ private:
 	void UpdateActionStates()
 	{
 		if (::IsWindow(undo.m_hWnd)) {
-			undo.EnableWindow(mode == 1 && ::IsWindow(notes.m_hWnd) && notes.SendMessage(EM_CANUNDO));
+			undo.EnableWindow(mode == 1 && ::IsWindow(notes.m_hWnd) && notes.CanUndo());
 		}
 		if (::IsWindow(copy.m_hWnd)) {
 			int length = mode == 0 ? log.GetWindowTextLength() : notes.GetWindowTextLength();
@@ -1393,6 +1394,84 @@ static CString effective_call_identity_for_log(const pjsua_call_info* call_info,
 		return sipuri.name + _T(" <") + uri + _T(">");
 	}
 	return uri;
+}
+
+static bool redirect_incoming_call(pjsua_call_info* call_info, const CString& configuredDestination,
+	CString& contactTarget, CString& failure)
+{
+	contactTarget = configuredDestination;
+	contactTarget.Trim();
+	if (contactTarget.IsEmpty()) {
+		failure = _T("destination is blank");
+		return false;
+	}
+
+	CString lower = contactTarget;
+	lower.MakeLower();
+	if (lower.Find(_T("tel:")) == 0) {
+		contactTarget = contactTarget.Mid(4);
+		contactTarget.Trim();
+		lower = contactTarget;
+		lower.MakeLower();
+	}
+	if (lower.Find(_T("sip:")) != 0 && lower.Find(_T("sips:")) != 0) {
+		if (contactTarget.Find(_T('@')) == -1) {
+			SIPURI localUri;
+			MSIP::ParseSIPURI(MSIP::PjToStr(&call_info->local_info, TRUE), &localUri);
+			if (localUri.domain.IsEmpty()) {
+				failure = _T("incoming account has no SIP domain");
+				return false;
+			}
+			contactTarget += _T("@") + localUri.domain;
+		}
+		contactTarget = _T("sip:") + contactTarget;
+	}
+
+	pj_pool_t* pool = pjsua_pool_create("client_cfw", 1024, 1024);
+	if (!pool) {
+		failure = _T("unable to allocate SIP redirect data");
+		return false;
+	}
+	CStringA targetUtf8 = MSIP::Utf8EncodeUni(contactTarget);
+	int targetLength = targetUtf8.GetLength();
+	char* targetBuffer = targetUtf8.GetBuffer();
+	pjsip_uri* targetUri = pjsip_parse_uri(pool, targetBuffer, targetLength, 0);
+	if (!targetUri || (!PJSIP_URI_SCHEME_IS_SIP(targetUri) && !PJSIP_URI_SCHEME_IS_SIPS(targetUri))) {
+		targetUtf8.ReleaseBuffer();
+		pj_pool_release(pool);
+		failure = _T("destination is not a valid SIP/SIPS Contact URI");
+		return false;
+	}
+
+	pjsua_msg_data response;
+	pjsua_msg_data_init(&response);
+	pjsip_contact_hdr* contact = pjsip_contact_hdr_create(pool);
+	contact->uri = targetUri;
+	pj_list_push_back(&response.hdr_list, contact);
+	pj_status_t status = pjsua_call_answer(call_info->id, PJSIP_SC_MOVED_TEMPORARILY,
+		NULL, &response);
+	targetUtf8.ReleaseBuffer();
+	pj_pool_release(pool);
+	if (status != PJ_SUCCESS) {
+		failure = pj_error_text(status);
+		return false;
+	}
+	return true;
+}
+
+static void post_call_forwarding_result(bool succeeded, const CString& destination, const CString& detail = _T(""))
+{
+	CString* message = new CString();
+	if (succeeded) {
+		message->Format(_T("CFW           REDIRECT · %s"), destination);
+	}
+	else {
+		message->Format(_T("CFW           FAILED · %s%s%s"), destination,
+			detail.IsEmpty() ? _T("") : _T(" · "), detail);
+	}
+	if (!::PostMessage(mainDlg->m_hWnd, UM_CALL_FORWARDING_RESULT, succeeded, (LPARAM)message)) {
+		delete message;
+	}
 }
 
 static void on_reg_started2(pjsua_acc_id acc_id, pjsua_reg_info* info)
@@ -2222,6 +2301,24 @@ static void on_incoming_call(pjsua_acc_id acc, pjsua_call_id call_id,
 			user_data->hidden = true;
 		}
 		else {
+			CString forwardingDestination = accountSettings.forwardingNumber;
+			forwardingDestination.Trim();
+			if (accountSettings.FWD && !forwardingDestination.IsEmpty()) {
+				CString contactTarget;
+				CString failure;
+				if (redirect_incoming_call(call_info, forwardingDestination, contactTarget, failure)) {
+					CString traceDestination = forwardingDestination;
+					if (traceDestination.CompareNoCase(contactTarget) != 0) {
+						traceDestination += _T(" -> ") + contactTarget;
+					}
+					post_call_forwarding_result(true, traceDestination);
+					user_data->hidden = true;
+					user_data->CS.Unlock();
+					delete call_info;
+					return;
+				}
+				post_call_forwarding_result(false, forwardingDestination, failure);
+			}
 			bool autoAnswer = false;
 			int autoAnswerDelay = accountSettings.autoAnswerDelay;
 			if (accountSettings.autoAnswer == _T("all")) {
@@ -2292,30 +2389,6 @@ static void on_incoming_call(pjsua_acc_id acc, pjsua_call_id call_id,
 					autoAnswer = false;
 				}
 			}
-			bool forwarding = false;
-			if (!accountSettings.forwardingNumber.IsEmpty()) {
-				if (accountSettings.forwarding == _T("all") ||
-					(accountSettings.forwarding == _T("button") && accountSettings.FWD)
-					) {
-					forwarding = true;
-				}
-			}
-			if (forwarding) {
-				if (accountSettings.forwardingDelay > 0) {
-					if (autoAnswer && autoAnswerDelay > 0 && mainDlg->autoAnswerTimerCallId == PJSUA_INVALID_ID && autoAnswerDelay < accountSettings.forwardingDelay) {
-						//
-					}
-					else {
-						if (mainDlg->forwardingTimerCallId == PJSUA_INVALID_ID) {
-							mainDlg->forwardingTimerCallId = call_info->id;
-							mainDlg->SetTimer(IDT_TIMER_FORWARDING, accountSettings.forwardingDelay * 1000, NULL);
-						}
-					}
-				}
-				else {
-					user_data->forwarding = true;
-				}
-			}
 			if (autoAnswer) {
 				if (autoAnswerDelay > 0) {
 					if (mainDlg->autoAnswerTimerCallId == PJSUA_INVALID_ID) {
@@ -2353,10 +2426,7 @@ LRESULT CmainDlg::onIncomingCall(WPARAM wParam, LPARAM lParam)
 	user_data->autoAnswer = false;
 	bool playBeep = false;
 
-	if (user_data->forwarding && messagesDlg->CallAction(MSIP_ACTION_FORWARD, _T(""), call_info->id)) {
-	}
-	else
-		if (autoAnswer && AutoAnswer(call_info->id)) {
+	if (autoAnswer && AutoAnswer(call_info->id)) {
 		}
 		else {
             bool createRinging = true;
@@ -3007,6 +3077,7 @@ BEGIN_MESSAGE_MAP(CmainDlg, CBaseDialog)
 	ON_MESSAGE(UM_DIAL_TONE_OPTIONS, onDialToneOptions)
 	ON_MESSAGE(UM_ON_CALL_STATE, onCallState)
 	ON_MESSAGE(UM_ON_INCOMING_CALL, onIncomingCall)
+	ON_MESSAGE(UM_CALL_FORWARDING_RESULT, onCallForwardingResult)
 	ON_MESSAGE(UM_ON_MWI_INFO, onMWIInfo)
 	ON_MESSAGE(UM_ON_CALL_MEDIA_STATE, onCallMediaState)
 	ON_MESSAGE(UM_ON_CALL_TRANSFER_STATUS, onCallTransferStatus)
@@ -3873,6 +3944,18 @@ void CmainDlg::CallTraceOnIdentityChange(pjsua_call_id call_id)
 	line.Format(_T("Connected identity changed: %s -> %s"),
 		previous.IsEmpty() ? _T("-") : previous, current.IsEmpty() ? _T("-") : current);
 	m_callTracePanel->Append(line);
+}
+
+LRESULT CmainDlg::onCallForwardingResult(WPARAM, LPARAM lParam)
+{
+	CString* message = (CString*)lParam;
+	if (message) {
+		if (m_callTracePanel && ::IsWindow(m_callTracePanel->m_hWnd)) {
+			m_callTracePanel->Append(*message);
+		}
+		delete message;
+	}
+	return 0;
 }
 
 void CmainDlg::OnMenuLog()
@@ -5380,7 +5463,7 @@ void CmainDlg::UpdateWindowText(CString text, int icon, bool afterRegister)
 							}
 							str = Translate(_T("Online"));
 						}
-						if (accountSettings.forwarding == _T("button") && accountSettings.FWD) {
+						if (accountSettings.FWD && !accountSettings.forwardingNumber.IsEmpty()) {
 							icon = IDI_FORWARDING;
 							str = Translate(_T("Call Forwarding"));
 						}

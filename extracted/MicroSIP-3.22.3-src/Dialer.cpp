@@ -203,6 +203,7 @@ Dialer::Dialer(CWnd* pParent /*=NULL*/)
 	m_hasVoicemail = false;
 	m_dialToneSessionActive = false;
 	m_isButtonVoicemailVisible = false;
+	m_rebuildingButtons = false;
 	Create(IDD, pParent);
 }
 
@@ -560,9 +561,6 @@ BOOL Dialer::OnInitDialog()
 		m_ToolTip.AddTool(&m_ButtonDialerRedial, Translate(_T("Redial")));
 		m_ToolTip.AddTool(&m_ButtonDialerDelete, Translate(_T("Backspace")));
 		m_ToolTip.AddTool(&m_ButtonDialerClear, Translate(_T("Clear")));
-	if (accountSettings.recordingButton) {
-		m_ToolTip.AddTool(&m_ButtonRec, Translate(_T("Call Recording")));
-	}
 		CString str = Translate(_T("Voicemail Number"));
 		m_ToolTip.AddTool(&m_ButtonVoicemail, str);
 		m_ToolTip.AddTool(&m_ButtonVoicemailDisabled, str);
@@ -734,6 +732,7 @@ BEGIN_MESSAGE_MAP(Dialer, CBaseDialog)
 	ON_WM_CTLCOLOR()
 	ON_BN_CLICKED(IDC_DIALER_DND, &Dialer::OnBnClickedDND)
 	ON_BN_CLICKED(IDC_DIALER_FWD, &Dialer::OnBnClickedFWD)
+	ON_EN_CHANGE(IDC_DIALER_CFW_DESTINATION, &Dialer::OnCfwDestinationChange)
 	ON_BN_CLICKED(IDC_DIALER_AA, &Dialer::OnBnClickedAA)
 	ON_BN_CLICKED(IDC_DIALER_AC, &Dialer::OnBnClickedAC)
 	ON_BN_CLICKED(IDC_DIALER_CONF, &Dialer::OnBnClickedConf)
@@ -810,6 +809,7 @@ void Dialer::UpdateVoicemailButton(bool hasMail)
 
 void Dialer::RebuildButtons(bool init)
 {
+	m_rebuildingButtons = true;
 	CloseAccountSidecar();
 	if (IsChild(&m_AccountIdentity)) {
 		m_AccountIdentity.DestroyWindow();
@@ -838,6 +838,9 @@ void Dialer::RebuildButtons(bool init)
 		}
 		m_ButtonFWD.DestroyWindow();
 	}
+	if (IsChild(&m_CfwDestination)) {
+		m_CfwDestination.DestroyWindow();
+	}
 	if (IsChild(&m_ButtonAA)) {
 		if (m_ToolTip) {
 			m_ToolTip.DelTool(&m_ButtonAA);
@@ -863,14 +866,8 @@ void Dialer::RebuildButtons(bool init)
 		m_ButtonRec.DestroyWindow();
 	}
 	bool addDND = accountSettings.denyIncoming == _T("button");
-	bool addFWD = accountSettings.forwarding == _T("button") && !accountSettings.forwardingNumber.IsEmpty();
-	bool addAA = accountSettings.autoAnswer == _T("button");
-	bool addAC = accountSettings.buttonAC && !accountSettings.singleMode;
-	bool addConf = accountSettings.buttonCONF;
-	
-	bool addRec = accountSettings.recordingButton;
 	bool addAccountControls = true;
-	if (addDND || addFWD || addAA || addAC || addConf || addRec || addAccountControls) {
+	if (addDND || addAccountControls) {
 		CRect windowRect;
 		if (!init) {
 			GetWindowRect(windowRect);
@@ -895,61 +892,24 @@ void Dialer::RebuildButtons(bool init)
 			rect.left -= stepPx;
 			rect.right -= stepPx;
 		}
-		if (addRec) {
-			m_ButtonRec.Create(Translate(_T("REC")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_CHECKBOX | BS_PUSHLIKE | WS_DISABLED, rect, this, IDC_DIALER_REC);
-			m_ButtonRec.SetFont(GetFont());
-			AutoMove(m_ButtonRec.m_hWnd, 100, 100, 0, 0);
-			if (m_ToolTip) {
-				m_ToolTip.AddTool(&m_ButtonRec, Translate(_T("Call Recording")));
-			}
-			rect.left -= stepPx;
-			rect.right -= stepPx;
-		}
-		if (addConf) {
-			rect.left -= mapRect.top;
-			m_ButtonConf.Create(Translate(_T("CONF")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHLIKE | WS_DISABLED, rect, this, IDC_DIALER_CONF);
-			rect.right -= mapRect.top;
-			m_ButtonConf.SetFont(GetFont());
-			AutoMove(m_ButtonConf.m_hWnd, 100, 100, 0, 0);
-			if (m_ToolTip) {
-				m_ToolTip.AddTool(&m_ButtonConf, Translate(_T("Conference")));
-			}
-			rect.left -= stepPx;
-			rect.right -= stepPx;
-		}
-		if (addAA) {
-			m_ButtonAA.Create(Translate(_T("AA")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX | BS_PUSHLIKE, rect, this, IDC_DIALER_AA);
-			m_ButtonAA.SetFont(GetFont());
-			m_ButtonAA.SetCheck(accountSettings.AA ? BST_CHECKED : BST_UNCHECKED);
-			AutoMove(m_ButtonAA.m_hWnd, 100, 100, 0, 0);
-			if (m_ToolTip) {
-				m_ToolTip.AddTool(&m_ButtonAA, Translate(_T("Auto Answer")));
-			}
-			rect.left -= stepPx;
-			rect.right -= stepPx;
-		}
-		if (addAC) {
-			m_ButtonAC.Create(Translate(_T("AC")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX | BS_PUSHLIKE, rect, this, IDC_DIALER_AC);
-			m_ButtonAC.SetFont(GetFont());
-			m_ButtonAC.SetCheck(accountSettings.AC ? BST_CHECKED : BST_UNCHECKED);
-			AutoMove(m_ButtonAC.m_hWnd, 100, 100, 0, 0);
-			if (m_ToolTip) {
-				m_ToolTip.AddTool(&m_ButtonAC, Translate(_T("Auto Conference")));
-			}
-			rect.left -= stepPx;
-			rect.right -= stepPx;
-		}
-		if (addFWD) {
-			m_ButtonFWD.Create(Translate(_T("FWD")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX | BS_PUSHLIKE, rect, this, IDC_DIALER_FWD);
-			m_ButtonFWD.SetFont(GetFont());
-			m_ButtonFWD.SetCheck(accountSettings.FWD ? BST_CHECKED : BST_UNCHECKED);
-			AutoMove(m_ButtonFWD.m_hWnd, 100, 100, 0, 0);
-			if (m_ToolTip) {
-				m_ToolTip.AddTool(&m_ButtonFWD, Translate(_T("Call Forwarding")));
-			}
-			rect.left -= stepPx;
-			rect.right -= stepPx;
-		}
+		m_ButtonFWD.Create(_T("CFW"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX | BS_PUSHLIKE,
+			rect, this, IDC_DIALER_FWD);
+		m_ButtonFWD.SetFont(GetFont());
+		AutoMove(m_ButtonFWD.m_hWnd, 100, 100, 0, 0);
+		if (m_ToolTip) m_ToolTip.AddTool(&m_ButtonFWD, Translate(_T("Call Forwarding")));
+		rect.left -= stepPx;
+		rect.right -= stepPx;
+
+		int destinationWidth = stepPx * 3 - mapRect.bottom;
+		CRect destinationRect(rect.right - destinationWidth, rect.top, rect.right, rect.bottom);
+		m_CfwDestination.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL,
+			destinationRect, this, IDC_DIALER_CFW_DESTINATION);
+		m_CfwDestination.SetFont(GetFont());
+		m_CfwDestination.SetPlaceholder(Translate(_T("Forwarding destination")));
+		m_CfwDestination.SetWindowText(accountSettings.forwardingNumber);
+		AutoMove(m_CfwDestination.m_hWnd, 100, 100, 0, 0);
+		rect.left = destinationRect.left - stepPx;
+		rect.right = destinationRect.left - mapRect.bottom;
 		if (addDND) {
 			m_ButtonDND.Create(Translate(_T("DND")), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_CHECKBOX | BS_PUSHLIKE, rect, this, IDC_DIALER_DND);
 			m_ButtonDND.SetFont(GetFont());
@@ -979,9 +939,14 @@ void Dialer::RebuildButtons(bool init)
 		UpdateAccountIdentity();
 
 		SetDarkMode(accountSettings.darkMode);
+		m_rebuildingButtons = false;
+		UpdateCfwState(false);
 		if (!init) {
 			SetWindowPos(NULL, 0, 0, windowRect.Width(), windowRect.Height(), SWP_NOZORDER | SWP_NOMOVE);
 		}
+	}
+	else {
+		m_rebuildingButtons = false;
 	}
 }
 
@@ -1028,6 +993,7 @@ void Dialer::SetDarkMode(bool enabled)
 	m_ButtonEnd.EnableWindow(m_ButtonEnd.IsWindowEnabled());
 	m_ButtonDND.SetDarkMode(enabled);
 	m_ButtonFWD.SetDarkMode(enabled);
+	m_CfwDestination.SetDarkMode(enabled);
 	m_ButtonAA.SetDarkMode(enabled);
 	m_ButtonAC.SetDarkMode(enabled);
 	m_ButtonRec.SetDarkMode(enabled);
@@ -1993,9 +1959,35 @@ void Dialer::OnBnClickedDND()
 
 void Dialer::OnBnClickedFWD()
 {
-	accountSettings.FWD = m_ButtonFWD.GetCheck() == BST_CHECKED;
+	CString destination;
+	m_CfwDestination.GetWindowText(destination);
+	destination.Trim();
+	accountSettings.FWD = !destination.IsEmpty() && m_ButtonFWD.GetCheck() == BST_CHECKED;
+	m_ButtonFWD.SetCheck(accountSettings.FWD ? BST_CHECKED : BST_UNCHECKED);
 	mainDlg->UpdateWindowText();
 	mainDlg->AccountSettingsPendingSave();
+}
+
+void Dialer::OnCfwDestinationChange()
+{
+	if (!m_rebuildingButtons) UpdateCfwState(true);
+}
+
+void Dialer::UpdateCfwState(bool persist)
+{
+	if (!::IsWindow(m_CfwDestination.m_hWnd) || !::IsWindow(m_ButtonFWD.m_hWnd)) return;
+	CString destination;
+	m_CfwDestination.GetWindowText(destination);
+	accountSettings.forwardingNumber = destination;
+	CString usable = destination;
+	usable.Trim();
+	if (usable.IsEmpty()) accountSettings.FWD = false;
+	m_ButtonFWD.EnableWindow(!usable.IsEmpty());
+	m_ButtonFWD.SetCheck(accountSettings.FWD ? BST_CHECKED : BST_UNCHECKED);
+	if (persist) {
+		mainDlg->UpdateWindowText();
+		mainDlg->AccountSettingsPendingSave();
+	}
 }
 
 void Dialer::OnBnClickedAA()

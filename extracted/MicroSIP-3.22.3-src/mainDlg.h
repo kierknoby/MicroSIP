@@ -254,6 +254,7 @@ protected:
 	afx_msg LRESULT onDialToneOptions(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT onCallState(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onIncomingCall(WPARAM wParam,LPARAM lParam);
+	afx_msg LRESULT onCallForwardingResult(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT onMWIInfo(WPARAM wParam,LPARAM lParam);
 	afx_msg LRESULT onCallMediaState(WPARAM, LPARAM);
 	afx_msg LRESULT onCallTransferStatus(WPARAM, LPARAM);

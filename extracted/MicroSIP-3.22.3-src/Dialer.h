@@ -83,6 +83,7 @@ public:
 
 	CButtonBottom m_ButtonDND;
 	CButtonBottom m_ButtonFWD;
+	CPlaceholderEdit m_CfwDestination;
 	CButtonBottom m_ButtonAA;
 	CButtonBottom m_ButtonAC;
 	CButtonBottom m_ButtonRec;
@@ -161,7 +162,8 @@ public:
 	afx_msg void OnBnClickedOk();
 	afx_msg void OnBnClickedCancel();
 	afx_msg void OnBnClickedDND(); 
-	afx_msg void OnBnClickedFWD(); 
+	afx_msg void OnBnClickedFWD();
+	afx_msg void OnCfwDestinationChange();
 	afx_msg void OnBnClickedAA();
 	afx_msg void OnBnClickedAC();
 	afx_msg void OnBnClickedConf();
@@ -222,4 +224,6 @@ public:
 	void OnTimerShortcutsBlink();
 	afx_msg void OnBnClickedShortcut(UINT nID);
 	void RebuildButtons(bool init = false);
+	void UpdateCfwState(bool persist);
+	bool m_rebuildingButtons;
 };
